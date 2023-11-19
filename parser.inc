@@ -58,7 +58,7 @@ parse_url:
         je      .get_query
         
         cmp     byte[ecx], '#'
-        je      get_fragment
+        je      .get_fragment
 
         cmp     byte[ecx], ' ' ; check end path
         jne     @b
@@ -106,7 +106,7 @@ parse_url:
         cmp     byte[ecx], ' '  
         je      .exit_2
 
-        cmp     byte[ecx] '&'
+        cmp     byte[ecx], '&'
         jne     @b
 
         jmp     .get_query_new_arg
@@ -122,7 +122,7 @@ parse_url:
         inc     ecx
         cmp     byte[ecx - 1], ' '
         jne     @b
-        mov     [ecx - 1], 0
+        mov     byte[ecx - 1], 0
  .exit:
         ret
 
@@ -138,17 +138,31 @@ parse_url:
 parse_headers:
         ; init array
         mov     [esi + CONNECT_DATA.num_headers], 0
-        mov     [esi + CONNECT_DATA.http_headers], BASE_ARRAY_HEADERS
+        lea     eax, [BASE_ARRAY_HEADERS]
+        mov     [esi + CONNECT_DATA.http_headers], eax
         xor     edx, edx
+
+        ; for check size
+        mov     eax, [esi + CONNECT_DATA.request_size]
+        add     eax, [esi + CONNECT_DATA.buffer_request]
+
  .new_str:       
+        cmp     ecx, eax
+        jae     .exit
+        
         cmp     word[ecx], 0x0A0D ; \n
         jnz     .find_header
+ .exit:
         ; end find heeaders
+        mov     byte[ecx], 0 
         add     ecx, 2 ; ecx = base for body message
         ret
 
 .find_header:
         ; add new item in array headers
+        cmp     edx, 512 ; max count headers
+        jae     .exit
+
         inc     edx
         mov     dword[esi + CONNECT_DATA.num_headers], edx
         ; save pointer to name header
@@ -156,6 +170,9 @@ parse_headers:
         dec     ecx
  @@:       
         inc     ecx
+
+        cmp     ecx, eax
+        jae     .exit
 
         cmp     byte[ecx], ':'
         jnz     @b
@@ -165,8 +182,11 @@ parse_headers:
         ; save pointer to value
         mov     dword[BASE_ARRAY_HEADERS + (edx-1)*8 + 4], ecx
 @@:
+        cmp     ecx, eax
+        jae     .exit
+        
         inc     ecx
-        cmp     byte[ecx - 1], 0x0A0D
+        cmp     word[ecx - 1], 0x0A0D
         jnz     @b
         mov     byte[ecx - 1], 0
         inc     ecx ; set offset on new string

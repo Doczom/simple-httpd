@@ -7,15 +7,20 @@
 ;                      Version 0.0.1, 12 November 2023                        ;
 ;                                                                             ;
 ;*****************************************************************************;
-use32
-org 0
-
+;include "macros.inc"
+include 'D:\kos\programs\macros.inc'
+;include 'D:\kos\programs\network.inc'
+  use32
+  org    0
+  db     'MENUET01'
+  dd     1, START, I_END, MEM, STACKTOP, PATH, 0
+;KOS_APP_START
 
 include 'sys_func.inc'
 include 'settings.inc'
 
-
-start:
+;CODE
+START:
         mcall   68, 11  ; init heap
         mcall   40, EVM_STACK ;set event bitmap
 
@@ -30,7 +35,7 @@ start:
         jnz     .err_settings
 
         ;init server socket
-        push    dword SO_NONBLOCK
+        push    dword SO_NONBLOCK ; IPPROTO_TCP
         push    dword SOCK_STREAM
         push    dword AF_INET4
         call    netfunc_socket; AF_INET4, SOCK_STREAM, SO_NONBLOCK ; we dont want to block on accept
@@ -64,9 +69,9 @@ start:
 .listen_err:
 .bind_err:
         push    dword[srv_socket]
-        call    close; [srv_socket]
+        call    netfunc_close; [srv_socket]
 
-..err_settings:
+.err_settings:
 .sock_err:
         mcall   -1
 
@@ -77,9 +82,12 @@ thread_connect:
         mcall   40, EVM_STACK ; set event bitmap - network event 
 
         ; ожидание подключения Accept, sockaddr находится на вершине стека нового потока
-        lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
-        push    dword 16 ; 16 byte - sockaddr length
-        push    edx
+        ;lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
+        ;push    dword 16 ; 16 byte - sockaddr length
+        ;push    edx
+        push    srv_sockaddr.length
+        push    dword srv_sockaddr
+
         push    dword[srv_socket]
         call    netfunc_accept
 
@@ -119,8 +127,8 @@ thread_connect:
         test    eax, eax
         jz      @f
         add     [esi + CONNECT_DATA.request_size], eax
-        cmp     [esi + CONNECT_DATA.request_size], 0x8000 ; check end buffer
-        jb      @b
+ ;       cmp     [esi + CONNECT_DATA.request_size], 0x8000 ; check end buffer
+ ;       jb      @b
 @@:
         ; после получения всего запроса(более или менее всего) выделяем озу для 
         ; ассоциативного массива заголовков и аргументов запроса
@@ -129,21 +137,26 @@ thread_connect:
         ;  esp + 1024 .. esp + 2048 -> for URI args
         sub     esp, 2048 
 
-        ; parse http message 
-        call    parse_http_query ; ecx - buffer edx - length data in buffer
+        ; parse http message
+        mov     ecx, [esi + CONNECT_DATA.buffer_request] 
+        call    parse_http_query ; ecx - buffer 
         test    eax, eax
         jz      .err_parse
         ; вызов нужной функции из списка моделей
         
         ; TODO
         
+
+        ; if not found units, call file_server
+        call    file_server ; esi - struct 
+        ;TEST SERVER, DELETE ON RELISE
+
         ; end work thread
         jmp     .end_work
         
 
 .err_parse:
-        ; send error 501
-
+        call    file_server.err_http_501
 .end_work:
         add     esp, 2048
         ; free OUT buffer
@@ -167,14 +180,21 @@ thread_connect:
 
 include 'parser.inc'
 
+include 'file_server.inc'
 ; DATA AND FUNCTION
 include 'httpd_lib.inc'
 
+default_ini_path: db 'httpd.ini',0
+I_END:
+;DATA
+
 ; DATA
 
-srv_backlog:    dd 0 ; максимум одновременных подключений подключений
+;UDATA
 
-srv_socket:     dd 0
+srv_backlog:    rd 1 ; максимум одновременных подключений подключений
+
+srv_socket:     rd 1
 
 srv_sockaddr:
                 dw AF_INET4
@@ -184,9 +204,21 @@ srv_sockaddr:
   .length       = $ - srv_sockaddr
 
 GLOBAL_DATA:
-        .units          dd 0 ; указатель на ассоциативный массив пути и указателя на функцию либы(см ниж)
-        .unit_count     dd 0 ; количество записей в массиве
-        .libs           dd 0 ; указатель на массив указателей на ассоциативные массивы библиотек
+        .units          rd 1 ; указатель на ассоциативный массив пути и указателя на функцию либы(см ниж)
+        .unit_count     rd 1 ; количество записей в массиве
+        .libs           rd 1 ; указатель на массив указателей на ассоциативные массивы библиотек
+        .work_dir       rb 1024 ; max size path to work directory
+        .work_dir.size  rd 1 ; length string
+        .unit_dir       rb 1024
+        .unit_dir.size  rd 1
+
+        .MIME_types_arr rd 1
 ;;        .flags          dd 0 ; 1 - all hosts(элемент hosts не указатель на массив, а на функцию)
 
-
+PATH:
+        rb 256
+; stack memory
+        rb 4096
+STACKTOP:
+MEM:
+;KOS_APP_END

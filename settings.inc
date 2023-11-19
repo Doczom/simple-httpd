@@ -30,17 +30,39 @@ ends
 ; OUT: eax - 0 or err_code
 load_settings:
         ; check file path
-        sub     esp, 40 ; size file info struct
-        push    esp
-        push    ecx
-        call    FileInfo
-        lea     esp, [esp + 40]
-        test    eax, eax 
-        jnz     .err
+        ;sub     esp, 40 ; size file info struct
+        ;push    esp
+        ;push    ecx
+        ;call    FileInfo
+        ;lea     esp, [esp + 40]
+        ;test    eax, eax 
+        ;jnz     .err
 
+        ; TEST SERVER
+        mov     word[srv_sockaddr], AF_INET4
+        mov     word[srv_sockaddr.port], 0x5000 ; 80 port
+        mov     dword[srv_sockaddr.ip],  0x1589A8C0 ; 192.168.137.21 or 0xc0a88915 ?
+        mov     dword[srv_backlog], 10
+        
+        push    esi edi
+        mov     edi, GLOBAL_DATA.work_dir
+        mov     esi, test_workdir
+        mov     ecx, test_workdir.size
+        rep movsb
+        pop     edi esi  
+        mov     dword[GLOBAL_DATA.work_dir.size], test_workdir.size
+
+
+        mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR
+
+        xor     eax, eax
         ret
 .err:
         ret
+
+test_workdir: db '/sys'
+.size = $ - test_workdir
+
 
 ; Config format:
 ; Standart INI file:
