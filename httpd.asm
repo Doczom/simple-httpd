@@ -4,16 +4,19 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                      Version 0.0.1, 12 November 2023                        ;
+;                      Version 0.0.3, 12 November 2023                        ;
 ;                                                                             ;
 ;*****************************************************************************;
 ;include "macros.inc"
-include 'D:\kos\programs\macros.inc'
-;include 'D:\kos\programs\network.inc'
   use32
   org    0
   db     'MENUET01'
   dd     1, START, I_END, MEM, STACKTOP, PATH, 0
+include 'D:\kos\programs\macros.inc'
+purge mov,add,sub
+include 'D:\kos\programs\proc32.inc'
+include 'D:\kos\programs\dll.inc'
+;include 'D:\kos\programs\network.inc'
 ;KOS_APP_START
 
 include 'sys_func.inc'
@@ -23,6 +26,11 @@ include 'settings.inc'
 START:
         mcall   68, 11  ; init heap
         mcall   40, EVM_STACK ;set event bitmap
+
+        ; init library
+        stdcall dll.Load, @IMPORT
+        test    eax, eax
+        jnz     .err_settings  
 
         mov     ecx, PATH
         cmp     byte[ecx],0
@@ -142,15 +150,38 @@ thread_connect:
         call    parse_http_query ; ecx - buffer 
         test    eax, eax
         jz      .err_parse
-        ; вызов нужной функции из списка моделей
+        ; вызов нужной функции из списка модулей
+        cmp     dword[GLOBAL_DATA.units], 0
+        jz      .no_units
         
-        ; TODO
-        
+        mov     eax, [GLOBAL_DATA.units]
+.next_unit:
+        push    esi edi
+        mov     esi, [esi + CONNECT_DATA.uri_path]
+        lea     edi, [eax + 4*3]
+@@:
+        cmpsb
+        jne     @f
 
+        cmp     byte[edi - 1], 0
+        jne     @b
+        ; found unit
+        pop     edi esi
+        
+        push    esi
+        call    dword[eax + 4*2] ; httpd_serv
+
+        jmp     .end_work
+@@:
+        pop     edi esi
+
+        mov     eax, [eax]
+        test    eax, eax ; terminate list
+        jne     .next_unit
+
+.no_units:
         ; if not found units, call file_server
         call    file_server ; esi - struct 
-        ;TEST SERVER, DELETE ON RELISE
-
         ; end work thread
         jmp     .end_work
         
@@ -184,10 +215,59 @@ include 'file_server.inc'
 ; DATA AND FUNCTION
 include 'httpd_lib.inc'
 
-default_ini_path: db 'httpd.ini',0
+
 I_END:
 ;DATA
 
+@IMPORT:
+library libini,                 'libini.obj'
+
+import  libini,\
+        ini.get_str,            'ini_get_str',\
+        ini.get_int,            'ini_get_int',\
+        ini.enum_keys,          'ini_enum_keys'
+
+
+default_ini_path: db 'httpd.ini',0
+
+ini_section_units:      db 'UNITS',0
+ini_section_main:       db 'MAIN', 0
+
+ini_key_ip              db 'ip',0
+ini_key_port            db 'port',0
+ini_key_conn            db 'conn',0
+;ini_key_flags           db 'flags',0
+ini_key_work_dir        db 'work_dir',0
+ini_key_units_dir       db 'units_dir',0
+ini_key_mime_file       db 'mime_file',0
+
+httpd_unit_init         db 'httpd_init',0
+httpd_unit_serv         db 'httpd_serv',0
+
+IMPORT_UNIT:
+        dd      httpd_import, GLOBAL_DATA.unit_dir, 0
+
+httpd_import:
+.init   dd      httpd_unit_init  
+.serv   dd      httpd_unit_serv
+        dd      0
+
+EXPORT_DATA:
+        dd      netfunc_socket
+        dd      netfunc_close
+        dd      netfunc_bind
+        dd      netfunc_accept
+        dd      netfunc_listen
+        dd      netfunc_recv
+        dd      netfunc_send
+        dd      FileInfo
+        dd      FileRead
+        dd      Alloc
+        dd      Free
+        
+        dd      base_response
+        dd      GLOBAL_DATA
+        dd      0
 ; DATA
 
 ;UDATA
@@ -204,16 +284,15 @@ srv_sockaddr:
   .length       = $ - srv_sockaddr
 
 GLOBAL_DATA:
-        .units          rd 1 ; указатель на ассоциативный массив пути и указателя на функцию либы(см ниж)
-        .unit_count     rd 1 ; количество записей в массиве
-        .libs           rd 1 ; указатель на массив указателей на ассоциативные массивы библиотек
+        .units          rd 1 ; указатель на двусвязный не кольцевой(null terminator) список
+                             ; next, prev, ptr of httpd_serv(), uri path 
         .work_dir       rb 1024 ; max size path to work directory
         .work_dir.size  rd 1 ; length string
         .unit_dir       rb 1024
-        .unit_dir.size  rd 1
+        .unit_dir.end   rd 1
 
         .MIME_types_arr rd 1
-;;        .flags          dd 0 ; 1 - all hosts(элемент hosts не указатель на массив, а на функцию)
+;        .flags          dd 0 ; 1 - all hosts(элемент hosts не указатель на массив, а на функцию)
 
 PATH:
         rb 256

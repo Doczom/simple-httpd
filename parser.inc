@@ -2,6 +2,8 @@
 BASE_ARRAY_ARGS         equ (esi - 1024)
 BASE_ARRAY_HEADERS      equ (esi - 2048)
 
+;TODO: fix checking end http packed 
+
 ; IN:
 ;    esi - struct
 ;    ecx = ptr to str URI
@@ -109,6 +111,9 @@ parse_url:
         cmp     byte[ecx], '&'
         jne     @b
 
+        mov     byte[ecx], 0
+        inc     ecx
+
         jmp     .get_query_new_arg
 
 .get_fragment:
@@ -206,7 +211,8 @@ parse_http_query:
 ; message data
 
         mov     eax, [esi + CONNECT_DATA.request_size]
-        mov     [esi + CONNECT_DATA.tmp_req_size], eax
+        add     eax, [esi + CONNECT_DATA.buffer_request]
+        mov     [esi + CONNECT_DATA.end_buffer_request], eax
 
         ; check size 
         cmp     dword[esi + CONNECT_DATA.request_size], min_http_size
@@ -215,6 +221,9 @@ parse_http_query:
         ; get http METHOD this message
         mov     [esi + CONNECT_DATA.http_method], ecx
 @@:     
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+        
         inc     ecx
         cmp     byte[ecx - 1], ' ' ; find end method
         jnz     @b
@@ -230,17 +239,13 @@ parse_http_query:
         ; ecx <- uri string
         ; парсинг uri строки в заголовке запроса(получение схемы, пути аргументов, фрагмента и тд)
         call    parse_url
-        
-        ; check size
-        mov     edx, ecx
-        sub     edx, [esi + CONNECT_DATA.buffer_request]
-        sub     edx, 7 ; H/0.0 0x0d0 x0a
-        cmp     dword[esi + CONNECT_DATA.request_size], edx
-        jle     .error_exit
 
         ; get http version(HTTP/1.1)
         mov     [esi + CONNECT_DATA.http_verion], ecx
 @@:     
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+        
         inc     ecx
         cmp     word[ecx - 1], 0x0A0D
         jnz     @b
@@ -259,13 +264,11 @@ parse_http_query:
 
 
         ; check size
-        mov     edx, ecx
-        sub     edx, [esi + CONNECT_DATA.buffer_request]
-        cmp     dword[esi + CONNECT_DATA.request_size], edx
-        jl      .error_exit
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        je      @f
 
         mov     [esi + CONNECT_DATA.message_body], ecx
-        ; докачивается всё остальное
+@@:        
         mov     eax, esi 
         ret
 

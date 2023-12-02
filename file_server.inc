@@ -249,30 +249,25 @@ file_server:
 ; char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
 Get_MIME_Type:
         push    esi edi
+        mov     eax, [esp + 4*2 + 4]
+        mov     eax, [eax + FILED.end_path]
         mov     edx, [GLOBAL_DATA.MIME_types_arr]
-        mov     esi, [esp + 4*2 + 4]
-        sub     edx, 8
-.next:
-        add     edx, 8
-        mov     ecx, [esi + FILED.end_path] ;pointer to \0 full path
-
-        cmp     dword[edx], 0
-        jz      .found
-
-        mov     edi, [edx]
-        movzx   eax, byte[edi]          
-        sub     ecx, eax
 @@:
-        inc     edi
-        mov     al, [edi]
-        cmp     byte[ecx], al
-        jne     .next
-
-        inc     ecx
-        test    al, al
-        jne     @b        
-
-.found:
-        mov     eax, [edx + 4]
-        pop     edi esi
+        mov     esi, [edx]
+        add     edx, 4
+        cmp     dword[esi], 0
+        jz      .other
+        
+        mov     edi, eax
+        movzx   ecx, byte [esi]
+        inc     esi
+        sub     edi, ecx
+        repe cmpsb
+        jne     @b
+@@:
+        mov     eax, esi
+        pop     edi esi 
         ret 4
+.other:
+        add     esi, 4
+        jmp     @b
