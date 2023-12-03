@@ -20,13 +20,20 @@ macro table arg3, [arg1,arg2] {
 }
 
 
-table   'application/octet-stream'      ,\
-        '.html', 'text/html'            ,\
-        '.css', 'text/css'              ,\
-        '.js', 'text/javascript'        ,\
-        '.txt', 'text/plain'            ,\
-        '.pdf', 'application/pdf'       ,\
-        '.json', 'application/json'     ,\
-        '.png', 'image/png'             ,\
-        '.mp3', 'audio/mpeg'            ,\
-        '.mp4', 'video/mp4'
+table   'application/octet-stream'              ,\
+        '.html', 'text/html'                    ,\
+        '.htm', 'text/html'                    ,\
+        '.css', 'text/css'                      ,\
+        '.js', 'text/javascript'                ,\
+        '.txt', 'text/plain; charset=utf-8'     ,\
+        '.pdf', 'application/pdf'               ,\
+        '.json', 'application/json'             ,\
+        '.png', 'image/png'                     ,\
+        '.mp3', 'audio/mpeg'                    ,\
+        '.mp4', 'video/mp4'                     ,\
+        '.gif', 'image/gif'                     ,\
+        '.webp', 'image/webp'                   ,\
+        '.svg', 'image/svg+xml'                 ,\
+        '.apng', 'image/apng'                   ,\
+        '.jpeg', 'image/jpeg'                   ,\
+        '.jpg','image/jpeg'

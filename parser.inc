@@ -259,7 +259,7 @@ parse_http_query:
         cmp     dword[esi + CONNECT_DATA.request_size], edx
         jle     .error_exit
 
-        ; получение заголовков запроса (ключ + значение-строка)
+        ; get headers request (key + value string)
         call    parse_headers
 
 

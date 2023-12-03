@@ -130,18 +130,17 @@ response:
 ;                db 'Date: '
 ;.date:          db 'Sun, 30 Oct 2022 09:29:13 GMT',13, 10
                 db 'Content-length: '
-;.content_len:   db '                      ', 13, 10
 .content_len = $ - response   
                 db '0000000000000000000000', 13, 10
                 db 'Content-type: '
 .content_type = $ - response  
                 db '                                                                ', 13, 10;
                   ;'text/html; charset=utf-8'
-.end_headers:         ;нужно, когда базового заголовка не хватает
+.end_headers:         ; for adding new headers, and save connection(keep-alive)
 .connection = $ - response    
                 db 'Connection: close', 13, 10
                 db 13, 10
-.body = $ - response          ; с этого оффсета уже писать данные
+.body = $ - response          ; offset for add http body in simple response 
 
 ; min HTTP request size
 ; "GET / HTTP/1.1" - 18 byte

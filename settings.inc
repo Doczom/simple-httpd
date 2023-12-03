@@ -76,7 +76,7 @@ load_settings:
         ; flags
 
         ; work_dir
-        invoke  ini.get_str, ebp, ini_section_main, ini_key_work_dir, GLOBAL_DATA.work_dir, 1024, 0 ; ip
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_work_dir, GLOBAL_DATA.work_dir, 1024, 0 
         push    edi
         mov     ecx, 1024
         mov     edi, GLOBAL_DATA.work_dir
@@ -88,10 +88,11 @@ load_settings:
         pop     edi
 
         ; TODO: get mime file
-        mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR
-        
+        ;mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR
+        call    load_mime_file
+
         ; units_dir
-        invoke  ini.get_str, ebp, ini_section_main, ini_key_units_dir, GLOBAL_DATA.unit_dir, 1024, 0 ; ip
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_units_dir, GLOBAL_DATA.unit_dir, 1024, 0 
         push    edi
         mov     ecx, 1024
         mov     edi, GLOBAL_DATA.unit_dir
@@ -103,19 +104,6 @@ load_settings:
 
         ; get all units
         invoke  ini.enum_keys, ebp, ini_section_units, .add_unit
-        
-        ; TEST SERVER
-        ;mov     word[srv_sockaddr.port], 0x5000 ; 80 port
-        ;mov     dword[srv_sockaddr.ip],  0x1589A8C0 ; 192.168.137.21 or 0xc0a88915 ?
-        ;mov     dword[srv_backlog], 10
-        
-        ;push    esi edi
-        ;mov     edi, GLOBAL_DATA.work_dir
-        ;mov     esi, test_workdir
-        ;mov     ecx, test_workdir.size
-        ;rep movsb
-        ;pop     edi esi  
-        ;mov     dword[GLOBAL_DATA.work_dir.size], test_workdir.size
 
         xor     eax, eax
         ret
@@ -128,17 +116,17 @@ load_settings:
         jz      .add_unit.exit 
         
         mov     ecx, [GLOBAL_DATA.units]
-        mov     [eax], ecx
-        mov     dword[eax + 4], GLOBAL_DATA.units
+        mov     [eax + HTTPD_UNIT.next], ecx
+        mov     dword[eax + HTTPD_UNIT.prev], GLOBAL_DATA.units
         mov     [GLOBAL_DATA.units], eax
         test    ecx, ecx
         jnz     @f
-        mov     [ecx + 4], eax
+        mov     [ecx + HTTPD_UNIT.prev], eax
 @@:
         ; copy uri path
         push    esi edi
         mov     esi, [esp + 4*2 + 4*3] ; name
-        lea     edi, [eax + 4*3 + 1]
+        lea     edi, [eax + HTTPD_UNIT.uri_path + 1]
         mov     byte[edi - 1], '/'
 @@:
         movsb
@@ -163,9 +151,9 @@ load_settings:
 
  .add_unit.err:
         ; error
-        mov     eax, [esi] ; next
+        mov     eax, [esi + HTTPD_UNIT.next] ; next
         mov     [GLOBAL_DATA.units], eax 
-        mov     dword[eax + 4], GLOBAL_DATA.units
+        mov     dword[eax + HTTPD_UNIT.prev], GLOBAL_DATA.units
         
         push    esi
         call    Free
@@ -179,7 +167,7 @@ load_settings:
         jnz      .add_unit.err
 
         mov     eax, [httpd_import.serv]
-        mov     dword[esi + 4*2], eax
+        mov     dword[esi + HTTPD_UNIT.httpd_serv], eax
 
         mov     [httpd_import.init], httpd_unit_init
         mov     [httpd_import.serv], httpd_unit_serv
@@ -191,7 +179,61 @@ load_settings:
 .err:
         ret
 
-;test_workdir: db '/sys'
-;.size = $ - test_workdir
 
+load_mime_file:
+        stdcall Alloc, 4096
+        test    eax, eax
+        jz      .err
+        push    eax
+        mov     edi, eax
+        xor     eax, eax
+        mov     ecx, 1024
+        rep stosd 
+        pop     eax
 
+        mov     esi, eax
+        lea     ecx, [eax + sizeof.FILED + 40]
+        mov     [esi + FILED.path], ecx
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_mime_file, ecx, 1024, 0 
+        test    eax, eax
+        jnz     .no_file
+
+        lea     ecx, [esi + sizeof.FILED]
+        mov     [esi + FILED.buffer], ecx
+        stdcall FileInfo, esi
+        test    eax, eax
+        jnz     .no_file
+
+        mov     ecx, [esi + sizeof.FILED + 32]
+        stdcall Alloc, ecx
+        test    eax, eax 
+        jz      .no_file
+
+        mov     ecx, [esi + sizeof.FILED + 32]
+        mov     edi, eax
+        mov     [esi + FILED.buffer], eax
+        mov     [esi + FILED.size], ecx
+        mov     [esi + FILED.offset], 0
+        mov     dword[esi + FILED.offset + 4], 0
+        stdcall FileRead, esi
+        test    eax, eax
+        jnz     .error_read
+
+        mov     dword[GLOBAL_DATA.MIME_types_arr], edi
+        mov     eax, edi
+@@:
+        add     [edi], eax
+        mov     ecx, [edi]
+        add     edi, 4
+        cmp     dword[ecx], 0
+        jne     @b
+
+        stdcall Free, esi
+        ret
+.error_read:
+        stdcall Free, edi
+.no_file:
+        stdcall Free, esi
+.err:
+        mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR
+        ret

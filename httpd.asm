@@ -4,7 +4,7 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                      Version 0.0.3, 12 November 2023                        ;
+;                      Version 0.0.4, 12 November 2023                        ;
 ;                                                                             ;
 ;*****************************************************************************;
 ;include "macros.inc"
@@ -43,7 +43,7 @@ START:
         jnz     .err_settings
 
         ;init server socket
-        push    dword SO_NONBLOCK ; IPPROTO_TCP
+        push    dword SO_NONBLOCK ; IPPROTO_TCP ?
         push    dword SOCK_STREAM
         push    dword AF_INET4
         call    netfunc_socket; AF_INET4, SOCK_STREAM, SO_NONBLOCK ; we dont want to block on accept
@@ -150,7 +150,7 @@ thread_connect:
         call    parse_http_query ; ecx - buffer 
         test    eax, eax
         jz      .err_parse
-        ; вызов нужной функции из списка модулей
+        ; find unit  for uri path
         cmp     dword[GLOBAL_DATA.units], 0
         jz      .no_units
         
@@ -158,7 +158,7 @@ thread_connect:
 .next_unit:
         push    esi edi
         mov     esi, [esi + CONNECT_DATA.uri_path]
-        lea     edi, [eax + 4*3]
+        lea     edi, [eax + HTTPD_UNIT.uri_path]
 @@:
         cmpsb
         jne     @f
@@ -169,13 +169,13 @@ thread_connect:
         pop     edi esi
         
         push    esi
-        call    dword[eax + 4*2] ; httpd_serv
+        call    dword[eax + HTTPD_UNIT.httpd_serv] ; call unit function
 
         jmp     .end_work
 @@:
         pop     edi esi
 
-        mov     eax, [eax]
+        mov     eax, [eax] ; HTTPD_UNIT.next
         test    eax, eax ; terminate list
         jne     .next_unit
 
@@ -277,9 +277,9 @@ srv_backlog:    rd 1 ; максимум одновременных подклю�
 srv_socket:     rd 1
 
 srv_sockaddr:
-                dw AF_INET4
-  .port         dw 0
-  .ip           dd 0
+                rw 1
+  .port         rw 1
+  .ip           rd 1
                 rb 8
   .length       = $ - srv_sockaddr
 
@@ -292,7 +292,7 @@ GLOBAL_DATA:
         .unit_dir.end   rd 1
 
         .MIME_types_arr rd 1
-;        .flags          dd 0 ; 1 - all hosts(элемент hosts не указатель на массив, а на функцию)
+;        .flags          rd 1 
 
 PATH:
         rb 256

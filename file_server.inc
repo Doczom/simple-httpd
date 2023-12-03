@@ -1,5 +1,5 @@
-; Это модуль для обработки стандартных запросов на получение файла
-; по пути, который не относится к другому модулю
+; This is a module for processing standard requests to get a file along 
+; a path that does not belong to another module.
 
 
 file_server:

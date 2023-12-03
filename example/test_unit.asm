@@ -1,6 +1,7 @@
 format MS COFF
 public @EXPORT as 'EXPORTS'
 
+NO_DEBUG_INPUT = 1
 include 'D:\kos\programs\macros.inc'
 
 struct EXPORT_DATA
@@ -41,6 +42,7 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
 ends
 
 macro board_input message {
+if NO_DEBUG_INPUT = 0
         local ..str, ..end
         push    eax ebx ecx esi
         mov     esi, ..str
@@ -56,6 +58,7 @@ macro board_input message {
         db message,13, 10 
 ..end:
         pop     esi ecx ebx eax
+end if
 }
 
 section '.flat' code readable align 16
@@ -108,11 +111,12 @@ server_entry:
         mov     edi, text_message
         mov     ecx, text_message.size
 @@:
-        movsb
         dec     ecx
         jz      @f
-        cmp     byte[esi - 1], 0
-        jne     @b
+        cmp     byte[esi], 0
+        jz      @f
+        movsb
+        jmp     @b
 @@:
         pop     edi esi
 .no_args:
@@ -147,6 +151,19 @@ server_entry:
         mov     eax, [count_call]
         div     dword[_10]
         add     byte[edi + sceleton_resp.count + 2], dl
+        test    eax, eax
+        jz      @f
+
+        xor     edx, edx
+        div     dword[_10]
+        add     byte[edi + sceleton_resp.count + 1], dl
+        test    eax, eax
+        jz      @f
+
+        xor     edx, edx
+        div     dword[_10]
+        add     byte[edi + sceleton_resp.count], dl
+@@:
         
         ; set httpcode
         mov     dword[edi + sceleton_resp.code], '200 '
@@ -180,7 +197,7 @@ sceleton_resp:
                 db 'Cache-Control: no-cache', 13, 10
                 db 'Content-Encoding: identity', 13, 10
                 db 'Content-length: ' 
-                db '0336', 13, 10
+                db '0377', 13, 10
                 db 'Content-type: text/html ', 13, 10; 
                 db 'Connection: close', 13, 10
                 db 13, 10
