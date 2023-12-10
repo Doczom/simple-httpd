@@ -232,27 +232,27 @@ _10: dd 10
 sceleton_resp:  
                 db '<!DOCTYPE html>'
                 db '<html><head><meta charset="utf-8"><title>Test Server 2</title></head>'
-                db '<body><ul><il><a href="?gr=bpo">bpo</a></il><br><il><a href="?gr=btp">btp</a></il></ul>' 
+                db '<body><ul><li><a href="?gr=bpo">bpo</a></li><li><a href="?gr=btp">btp</a></li></ul>' 
                 db '<b>Название группы: </b>'
 .name = $ - sceleton_resp
-                db '                          <br><b>Экзамены:</b>'
+                db '                                  <br><b>Экзамены:</b>'
 .data = $ - sceleton_resp
                 db '                                                                  <br></body></html>'
 .size = $ - sceleton_resp
 
 
 bpo_data:
-        db      'Дискретка'
+        db      'Дискретка :('
 .size = $ - bpo_data
 bpo_name:
-        db      'БПО09-23-21'
+        db      'Разарботчики'
 .size = $ - bpo_name
 
 btp_data:
-        db      'Эти лохи химию сдают'
+        db      'Эти химию сдают :)'
 .size = $ - btp_data
 btp_name:
-        db      'БТП-23-21'
+        db      'Технологи'
 .size = $ - btp_name
 
 @EXPORT:
