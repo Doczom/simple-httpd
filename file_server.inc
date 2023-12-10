@@ -1,6 +1,7 @@
 ; This is a module for processing standard requests to get a file along 
 ; a path that does not belong to another module.
 
+SIZE_FILE_BUFFER        = 64*1024 
 
 file_server:
 
@@ -90,7 +91,7 @@ file_server:
 .send_file:
         ; create http response (set 200 code, MINE type and length of body)
         ;; alloc 33 kib 
-        push    dword 33*1024
+        push    dword SIZE_FILE_BUFFER
         call    Alloc
         test    eax, eax
         jz      .err_http_501 ; error memory
@@ -106,6 +107,11 @@ file_server:
 
         mov     edi, [esp]
         mov     dword[edi + response.code], '200 '
+        
+        mov     dword[edi + response.connection], 'keep'
+        mov     dword[edi + response.connection + 4], '-ali'
+        mov     word[edi + response.connection + 8], 've'
+        
         
         push    dword[esp + 4] ; <-FILED
         call    Get_MIME_Type
@@ -173,7 +179,7 @@ file_server:
         mov     dword[ebx + FILED.offset], 0
         mov     dword[ebx + FILED.offset + 4], 0
         mov     [ebx + FILED.buffer], edi
-        mov     [ebx + FILED.size], 32*1024
+        mov     [ebx + FILED.size], SIZE_FILE_BUFFER
 .send_response_body:
         ; read 32 kib to file 
         push    ebx
@@ -181,11 +187,13 @@ file_server:
         test    eax, eax
         jz      @f
         cmp     eax, 6
+
+        mov     [0], eax
         jne     .exit_free
 @@:
         ; send this block data 
         push    dword 0 ; flags
-        push    32*1024
+        push    SIZE_FILE_BUFFER
         push    edi
         push    dword[esi + CONNECT_DATA.socket]
         call    netfunc_send
@@ -202,7 +210,7 @@ file_server:
         jbe     .exit_free    
 
 .add_offset:
-        add     [ebx + FILED.offset], 32*1024
+        add     [ebx + FILED.offset], SIZE_FILE_BUFFER
         adc     [ebx + FILED.offset + 4], 0
 
         jmp     @b

@@ -2,23 +2,24 @@
 BASE_ARRAY_ARGS         equ (esi - 1024)
 BASE_ARRAY_HEADERS      equ (esi - 2048)
 
+MAX_COUNT_ARG           = 1024/(4+4)
+MAX_COUNT_HEADER        = 1024/(4+4)
+
 ;TODO: fix checking end http packed 
 
 ; IN:
 ;    esi - struct
-;    ecx = ptr to str URI
+;    ecx - ptr to str URI
 ; OUT:
-;    ecx - new base for reading data ('HTTP/1.1 ...')
-;    eax - 
-; NOTE: this function don`t check buffer size 
+;    ecx = new base for reading data ('HTTP/1.1 ...')
+;    eax = -1 - error 
+;           0 - good
 parse_url:
 ;      URI         = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
-;
 ;      hier-part   = "//" authority path-abempty
 ;                  / path-absolute
 ;                  / path-rootless
 ;                  / path-empty 
-;
 ;         foo://example.com:8042/over/there?name=ferret#nose
 ;         \_/   \______________/\_________/ \_________/ \__/
 ;          |           |            |            |        |
@@ -33,6 +34,9 @@ parse_url:
         ;get scheme
         mov     [esi + CONNECT_DATA.uri_scheme], ecx
 @@:
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+
         inc     ecx 
         cmp     byte[ecx - 1], ':'
         jne     @b
@@ -44,7 +48,10 @@ parse_url:
         add     ecx, 2
         mov     [esi + CONNECT_DATA.uri_authority], ecx
         ;get authority
-@@:
+@@: 
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+
         inc     ecx
         ;cmp     byte[ecx - 1], ' ' ;check end, не нужно, так как в http всегда / абс путь 
 
@@ -52,10 +59,14 @@ parse_url:
         jne     @b
         dec     ecx
 .get_path:
-        ;path-absolute
+        ;ecx = path-absolute 
         mov     [esi + CONNECT_DATA.uri_path], ecx
 @@:        
         inc     ecx
+
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+
         cmp     byte[ecx], '?'
         je      .get_query
         
@@ -77,11 +88,19 @@ parse_url:
         ; add new item
 .get_query_new_arg:
         inc     edx
+
+        cmp     edx, MAX_COUNT_HEADER 
+        jae     .error_exit
+
         mov     dword[BASE_ARRAY_ARGS + (edx-1)*8], ecx
         mov     [esi + CONNECT_DATA.num_uri_args], edx
         dec     ecx
 @@:
         inc     ecx
+
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+
         cmp     byte[ecx], '='
         je      .get_args
 
@@ -102,6 +121,10 @@ parse_url:
         dec     ecx
 @@:
         inc     ecx
+
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+
         cmp     byte[ecx], '#'
         je      .get_fragment
         
@@ -124,22 +147,29 @@ parse_url:
         inc     ecx
         mov     [esi + CONNECT_DATA.uri_fragment], ecx     
 @@:
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
+        
         inc     ecx
         cmp     byte[ecx - 1], ' '
         jne     @b
         mov     byte[ecx - 1], 0
  .exit:
+        xor     eax, eax 
         ret
 
+.error_exit:
+        ; set return value
+        mov     eax, -1
+        ret
 
 ; IN:
 ;    esi - struct
 ;    ecx - ptr to begin headers block
-;    edx - free mem ptr 
 ; OUT:
-;    ecx - new base for reading body message HTTP query
-;    eax -  
-; NOTE: this function don`t check buffer size 
+;    ecx = new base for reading body message HTTP query
+;    eax = -1 - error
+;           0 - good
 parse_headers:
         ; init array
         mov     [esi + CONNECT_DATA.num_headers], 0
@@ -148,12 +178,10 @@ parse_headers:
         xor     edx, edx
 
         ; for check size
-        mov     eax, [esi + CONNECT_DATA.request_size]
-        add     eax, [esi + CONNECT_DATA.buffer_request]
-
+        mov     eax, [esi + CONNECT_DATA.end_buffer_request]
  .new_str:       
         cmp     ecx, eax
-        jae     .exit
+        jae     .error_exit
         
         cmp     word[ecx], 0x0A0D ; \n
         jnz     .find_header
@@ -161,12 +189,16 @@ parse_headers:
         ; end find heeaders
         mov     byte[ecx], 0 
         add     ecx, 2 ; ecx = base for body message
+        xor     eax, eax
         ret
+.error_exit:
+        mov     eax, -1
+        ret     
 
 .find_header:
         ; add new item in array headers
-        cmp     edx, 512 ; max count headers
-        jae     .exit
+        cmp     edx, MAX_COUNT_HEADER 
+        jae     .error_exit
 
         inc     edx
         mov     dword[esi + CONNECT_DATA.num_headers], edx
@@ -175,9 +207,9 @@ parse_headers:
         dec     ecx
  @@:       
         inc     ecx
-
+        ; check size
         cmp     ecx, eax
-        jae     .exit
+        jae     .error_exit
 
         cmp     byte[ecx], ':'
         jnz     @b
@@ -187,12 +219,14 @@ parse_headers:
         ; save pointer to value
         mov     dword[BASE_ARRAY_HEADERS + (edx-1)*8 + 4], ecx
 @@:
+        ; check size
         cmp     ecx, eax
-        jae     .exit
+        jae     .error_exit
         
         inc     ecx
         cmp     word[ecx - 1], 0x0A0D
         jnz     @b
+
         mov     byte[ecx - 1], 0
         inc     ecx ; set offset on new string
         jmp     .new_str
@@ -201,7 +235,7 @@ parse_headers:
 ;    ecx - raw data query
 ;    esi - ptr to CONNECT_DATA 
 ; OUT: eax = 0 error
-;     eax = prt to struct CONNECT_DATA
+;      eax = prt to struct CONNECT_DATA
 parse_http_query:
 ;method scheme://host:port/abs_path HTTP/1.1 0x0d 0x0a
 ;header_1:value 0x0d 0x0a
@@ -230,15 +264,15 @@ parse_http_query:
         mov     byte[ecx - 1], 0 
         
         ; check size
-        mov     edx, ecx
-        sub     edx, [esi + CONNECT_DATA.buffer_request]
-        sub     edx, 2 ; / 0x20
-        cmp     dword[esi + CONNECT_DATA.request_size], edx
-        jle     .error_exit
+        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
+        ja      .error_exit
 
         ; ecx <- uri string
-        ; парсинг uri строки в заголовке запроса(получение схемы, пути аргументов, фрагмента и тд)
+        ; parsing the URI string in the start line of the query 
+        ; (getting the schema, path, arguments, fragment, etc.)
         call    parse_url
+        test    eax, eax
+        jnz     .error_exit
 
         ; get http version(HTTP/1.1)
         mov     [esi + CONNECT_DATA.http_verion], ecx
@@ -261,7 +295,8 @@ parse_http_query:
 
         ; get headers request (key + value string)
         call    parse_headers
-
+        test    eax, eax
+        jnz     .error_exit
 
         ; check size
         cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]

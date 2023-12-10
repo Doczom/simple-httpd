@@ -6,6 +6,8 @@ FLAG_KEEP_ALIVE = 0x01
 
 NO_DEBUG_INPUT = 0
 include 'D:\kos\programs\macros.inc'
+purge mov,add,sub
+include 'D:\kos\programs\proc32.inc'
 
 struct IMPORT_DATA
         version         rd 1 ; dword for check api
@@ -92,7 +94,6 @@ unit_init:
         mov     eax, -1
         push    esi edi
         mov     esi, [esp + 4*2 + 4]
-        mov     [import_httpd], esi
 
         cmp     dword[esi + IMPORT_DATA.version], API_VERSION
         jne     .exit
@@ -113,7 +114,6 @@ server_entry:
         mov     esi, [esp + 4*2 + 4]
         ; work
         board_input 'first'
-        inc     dword[count_call]
 
         cmp     [esi + CONNECT_DATA.num_uri_args], 1
         jb     .no_args
@@ -121,144 +121,139 @@ server_entry:
         mov     eax, [esi + CONNECT_DATA.uri_arg]
         
         mov     ecx, [eax]
-        cmp     dword[ecx], 'cmd'
+        cmp     word[ecx], 'gr'
         jne     .no_args
-        mov     edx, [eax + 4]
-        cmp     dword[edx], 'new'
-        je      .no_del
 
-        cmp     dword[edx], 'del'
+        cmp     byte[ecx + 2], 0
+        jne     .no_args
 
-        mov     dword[text_message], '    '
-        mov     dword[text_message + 4], '    '
-        mov     dword[text_message + 8], '    '
-        mov     dword[text_message + 12], '    '
-        jmp     .no_args
-
-.no_del:
-        cmp     [esi + CONNECT_DATA.num_uri_args], 2
-        jb     .no_args
         
-        mov     ecx, [eax + 8]
-        cmp     dword[ecx], 'txt'
-        jne     .no_args
+        mov     ecx, [eax + 4]
+        cmp     dword[ecx], 'bpo'
+        jne     .no_bpo
 
-        mov     dword[text_message], '    '
-        mov     dword[text_message + 4], '    '
-        mov     dword[text_message + 8], '    '
-        mov     dword[text_message + 12], '    '
-
-        push    esi edi
-        mov     esi, [eax + 12]
-        mov     edi, text_message
-        mov     ecx, text_message.size
-@@:
-        dec     ecx
-        jz      @f
-        cmp     byte[esi], 0
-        jz      @f
-        movsb
-        jmp     @b
-@@:
-        pop     edi esi
-.no_args:
-        board_input 'create message'
-        ; create http message
-        push    dword 8*1024
-        call    [IMPORT + IMPORT_DATA.Alloc]
-        test    eax, eax 
+        board_input 'bpo'
+        invoke  IMPORT.Alloc, sceleton_resp.size
+        test    eax, eax
         jz      .exit
 
-        push    esi edi
-        mov     ecx, sceleton_resp.size
+        push    esi
+        mov     edi, eax
         mov     esi, sceleton_resp
-        mov     edi, eax
-        rep movsd
-        pop     edi esi
+        mov     ecx, sceleton_resp.size
+        rep movsb
 
-        mov     [esi + CONNECT_DATA.buffer_response], eax
-        ; copy message
-        mov     ecx, [text_message]
-        mov     [eax + sceleton_resp.message], ecx
-        mov     ecx, [text_message + 4]
-        mov     [eax + sceleton_resp.message + 4], ecx
-        mov     ecx, [text_message + 8]
-        mov     [eax + sceleton_resp.message + 8], ecx
-        mov     ecx, [text_message + 12]
-        mov     [eax + sceleton_resp.message + 12], ecx
-        ; copy count_call
-        mov     edi, eax
-        xor     edx, edx
-        mov     eax, [count_call]
-        div     dword[_10]
-        add     byte[edi + sceleton_resp.count + 2], dl
+        lea     edi, [eax + sceleton_resp.name]
+        mov     esi, bpo_name
+        mov     ecx, bpo_name.size
+        rep movsb
+
+        lea     edi, [eax + sceleton_resp.data]
+        mov     esi, bpo_data
+        mov     ecx, bpo_data.size
+        rep movsb
+        pop     esi
+
+        jmp     .send_data
+.no_bpo:
+        cmp     dword[ecx], 'btp'
+        jne     .err_404
+
+        board_input 'btp'
+        invoke  IMPORT.Alloc, sceleton_resp.size
         test    eax, eax
-        jz      @f
+        jz      .exit
 
-        xor     edx, edx
-        div     dword[_10]
-        add     byte[edi + sceleton_resp.count + 1], dl
+        push    esi
+        mov     edi, eax
+        mov     esi, sceleton_resp
+        mov     ecx, sceleton_resp.size
+        rep movsb
+
+        lea     edi, [eax + sceleton_resp.name]
+        mov     esi, btp_name
+        mov     ecx, btp_name.size
+        rep movsb
+
+        lea     edi, [eax + sceleton_resp.data]
+        mov     esi, btp_data
+        mov     ecx, btp_data.size
+        rep movsb
+        pop     esi
+
+        jmp     .send_data
+.no_args:
+        board_input 'no_arg'
+        invoke  IMPORT.create_resp, esi, 0
         test    eax, eax
-        jz      @f
+        jz      .exit
 
-        xor     edx, edx
-        div     dword[_10]
-        add     byte[edi + sceleton_resp.count], dl
-@@:
-        
-        ; set httpcode
-        mov     dword[edi + sceleton_resp.code], '200 '
-        ; send http message
-
-        push    dword 0 ; flags
-        push    sceleton_resp.size
-        push    edi
-        push    dword[esi + CONNECT_DATA.socket]
-        call    [IMPORT + IMPORT_DATA.netfunc_send]
-
-        board_input 'send'
+        push    eax
+        invoke  IMPORT.send_resp, eax, sceleton_resp, sceleton_resp.size
+        invoke  IMPORT.destruct_resp ; arg in stack
 .exit:
         pop     edi esi
         ret     4
+
+.send_data: ; eax - ptr to buffer
+        mov     edi, eax
+        board_input 'create_resp'
+        invoke  IMPORT.create_resp, esi, 0
+        test    eax, eax
+        jz      .exit
+
+        board_input 'send_data'
+        push    eax
+        invoke  IMPORT.send_resp, eax, edi, sceleton_resp.size
+        invoke  IMPORT.destruct_resp ; arg in stack
+
+        invoke  IMPORT.Free, edi
+        jmp     .exit
+
+.err_404:
+        ; send resp 404
+        board_input 'err404'
+        invoke  IMPORT.create_resp, esi, 0
+        test    eax, eax
+        jz      .exit
+        
+        mov     edi, eax
+        invoke  IMPORT.set_http_status, edi, dword '404'
+        invoke  IMPORT.send_resp, edi, 0, 0
+        invoke  IMPORT.destruct_resp, edi
+        jmp     .exit
+
+
 
 section '.data' data readable writable align 16
 
 _10: dd 10
 
-count_call dd 0
-
-import_httpd: dd 0
-
 sceleton_resp:  
-                db 'HTTP/1.0 '
-.code = $ - sceleton_resp        
-                db '000 ',13, 10
-                db 'Server: simple-httpd/0.0.1', 13, 10 
-                db 'Cache-Control: no-cache', 13, 10
-                db 'Content-Encoding: identity', 13, 10
-                db 'Content-length: ' 
-                db '0377', 13, 10
-                db 'Content-type: text/html ', 13, 10; 
-                db 'Connection: close', 13, 10
-                db 13, 10
                 db '<!DOCTYPE html>'
-                db '<html><head><meta charset="utf-8"><title>Test Server</title></head>'
-                db '<body><table cellspacing="0" border="1">'
-                db '<thead><caption>Данные с сервера</caption><tr>'
-                db '<th>Name'
-                db '<th>Info </thead>'
-                db '<tbody align="center">'
-                db              '<tr><td> Количество запросов <td>'
-.count = $ - sceleton_resp
-                db '000   <tr><td> Сообщение <td>'
-.message = $ - sceleton_resp
-                db '                             </tbody></table></body></html>'
+                db '<html><head><meta charset="utf-8"><title>Test Server 2</title></head>'
+                db '<body><ul><il><a href="?gr=bpo">bpo</a></il><br><il><a href="?gr=btp">btp</a></il></ul>' 
+                db '<b>Название группы: </b>'
+.name = $ - sceleton_resp
+                db '                          <br><b>Экзамены:</b>'
+.data = $ - sceleton_resp
+                db '                                                                  <br></body></html>'
 .size = $ - sceleton_resp
 
 
-text_message:
-        db      '                '
-.size = $ - text_message
+bpo_data:
+        db      'Дискретка'
+.size = $ - bpo_data
+bpo_name:
+        db      'БПО09-23-21'
+.size = $ - bpo_name
+
+btp_data:
+        db      'Эти лохи химию сдают'
+.size = $ - btp_data
+btp_name:
+        db      'БТП-23-21'
+.size = $ - btp_name
 
 @EXPORT:
 export  \

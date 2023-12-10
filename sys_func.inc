@@ -215,3 +215,240 @@ FileRead:
         mcall   70
         pop     ebx
         ret     4
+
+
+
+FLAG_KEEP_ALIVE = 0x01
+FLAG_ADD_DATE   = 0x02 ;(not supported)
+FLAG_NO_SET_CACHE  = 0x04 ;(not supported)
+FLAG_NO_CONTENT_ENCODING = 0x08 ;(not supported)
+
+
+
+
+;RESPD* stdcall create_resp(CONNECT_DATA* session, uint32_t flags)
+create_resp:
+        stdcall Alloc, sizeof.RESPD
+        test    eax, eax
+        jz      .exit
+        
+        mov     edx, [esp + 4]
+        mov     ecx, [esp + 8]
+        mov     [eax + RESPD.flags], ecx
+        mov     [eax + RESPD.session], edx
+        ; set default values 
+        mov     [eax + RESPD.http_status], '200 '
+        mov     [eax + RESPD.http_ver_ptr], default_http_version
+        mov     [eax + RESPD.http_ver_len], default_http_version.length
+        mov     [eax + RESPD.count_header], 0 
+.exit:
+        ret     8
+
+;void destruct_resp(RESPD* ptr)
+destruct_resp:
+        stdcall Free, [esp + 4]
+        ret     4
+
+;void set_http_status(RESPD* ptr, uint32_t status) // status in '200' format
+set_http_status:
+        mov     eax, [esp + 4]
+        mov     ecx, [esp + 8]
+        and     ecx, 0x00ffffff ; clear 3 byte register
+        add     ecx, 0x20 shl 24 ; set 3 byte in ' '
+        mov     [eax + RESPD.http_status], ecx
+        ret     8
+;void set_http_ver(RESPD* ptr, char* version, uint32_t length) // example: 'RTSP/1.1 '
+set_http_ver:
+        mov     eax, [esp + 4]
+        mov     ecx, [esp + 8]
+        mov     edx, [esp + 12]
+        mov     [eax + RESPD.http_ver_ptr], ecx
+        mov     [eax + RESPD.http_ver_len], edx
+
+        ret     12
+
+;uint32_t add_http_header(RESPD* ptr, char* ptr_header, uint32_t length)
+add_http_header:
+        mov     eax, [esp + 4]
+        mov     ecx, [eax + RESPD.count_header]
+        cmp     ecx, 64
+        jz      .err
+        
+        inc     dword[eax + RESPD.count_header]
+        mov     edx, [esp + 8]
+        mov     [eax + ecx*8 + RESPD.header.ptr], edx
+        mov     edx, [esp + 12]
+        mov     [eax + ecx*8 + RESPD.header.len], edx
+        mov     eax, ecx
+        ret     12
+.err:
+        mov     eax, -1
+        ret     12
+
+
+;uint32_t del_http_header(RESPD* ptr, char* ptr_header) // no del std header
+del_http_header:
+        mov     eax, [esp + 4]
+        mov     edx, [esp + 8]
+        mov     ecx, [eax + RESPD.count_header]
+        add     eax, RESPD.header.ptr
+@@:
+        test    ecx, ecx 
+        jz      .err
+
+        cmp     [eax], edx
+        je      .found
+
+        add     eax, 8
+        dec     ecx
+        jmp     @b
+.found:
+        dec     ecx ; skiip one item
+@@:
+        test    ecx, ecx
+        jz      .exit
+        mov     edx, [eax + 8]
+        mov     [eax], edx
+        mov     edx, [eax + 8 + 4]
+        mov     [eax + 4], edx
+
+        add     eax, 8
+        jmp     @b
+.exit:
+        mov     ecx, [esp + 4]
+        inc     dword[ecx + RESPD.count_header]
+        ret     8
+.err:
+        mov     eax, -1
+        ret     8
+
+
+;uint32_t send_resp(RESPD* ptr, char* content, uint32_t length)
+send_resp:
+        push    esi edi ebp
+        ; get full size 
+        mov     ebp, [esp + 4*3 + 4]
+        mov     ecx, [ebp + RESPD.count_header]
+        shl     ecx, 1 ; *2
+        add     ecx, 2 ; finish 0x0d 0x0a
+        add     ecx, [ebp + RESPD.http_ver_len]
+        ;       add size all headers
+        xor     edx, edx
+@@:
+        cmp     edx, [ebp + RESPD.count_header]
+        je      @f
+        add     ecx, [ebp + edx*8 + RESPD.header.len]
+        inc     edx
+        jmp     @b
+@@:
+        add     ecx, response.end_headers - response.code
+        ;       add size content
+        ;add     ecx, [esp + 4*3 + 12]
+
+        ; alloc buffer
+        push    ecx
+        stdcall Alloc, ecx
+        pop     ecx
+        test    eax, eax 
+        jz      .error_alloc
+
+        mov     [ebp + RESPD.buffer], eax
+        mov     [ebp + RESPD.buffer_size], ecx
+        mov     edi, eax
+        ; copy data
+        mov     ecx, [ebp + RESPD.http_ver_len]
+        mov     esi, [ebp + RESPD.http_ver_ptr]
+        rep movsb ; copy http ver
+
+        mov     esi, base_response + response.code
+        mov     ecx, response.end_headers - response.code
+        mov     edx, edi
+        rep movsb ; copy default status code + headers
+
+        mov     eax, [ebp + RESPD.http_status]
+        mov     [edx], eax
+
+        test    [ebp + RESPD.flags], FLAG_KEEP_ALIVE
+        jz      @f
+
+        push    edx
+        add     edx, response.connection - response.code
+        mov     dword[edx], 'keep'
+        mov     dword[edx + 4], '-ali'
+        mov     word[edx + 8], 've'
+        pop     edx        
+@@:     
+        add     edx, response.content_len + 21 - response.code
+        mov     ecx, edx
+        ;       set content length
+        mov     eax, [esp + 4*3 + 12] 
+@@:
+        xor     edx, edx
+        test    eax, eax
+        jz      @f
+        div     dword[_DIV_10_]
+        add     byte[ecx], dl
+        dec     ecx
+        jmp     @b
+@@:
+        ;       copy addition headers
+        lea     eax, [ebp + RESPD.header.ptr]
+        xor     edx, edx 
+@@:
+        cmp     edx, [ebp + RESPD.count_header]
+        je      @f
+
+        mov     esi, [eax]
+        mov     ecx, [eax + 4]
+        rep movsb
+
+        mov     word[edi], 0x0a0d
+        add     edi, 2
+
+        add     eax, 8
+        inc     edx
+        jmp     @b
+@@:
+        mov     ax, 0x0A0D
+        stosw
+
+        ; send response status line and headers
+        mov     eax, [ebp + RESPD.session]
+
+        push    dword 0
+        push    dword[ebp + RESPD.buffer_size]
+        push    dword[ebp + RESPD.buffer]
+        push    dword[eax + CONNECT_DATA.socket]
+        call    netfunc_send
+
+        cmp     eax, -1
+        jz      .exit
+        ; send content 
+
+        mov     ecx, [esp + 4*3 + 8] ; ptr
+        test    ecx, ecx
+        jz      .free
+        
+        mov     eax, [ebp + RESPD.session]
+        push    dword 0
+        push    dword[esp + 4*4 + 12] ; size
+        push    ecx
+        push    dword[eax + CONNECT_DATA.socket]
+        call    netfunc_send
+
+        cmp     eax, -1
+        jz      .exit
+.free:
+        xor     eax, eax
+        ; free buffer
+        push    eax
+        stdcall Free, [ebp + RESPD.buffer]
+        pop     eax
+.exit:
+        pop     ebp edi esi
+        ret     12
+
+.error_alloc:
+        mov     eax, -1
+        jmp     .exit
+

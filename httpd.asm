@@ -4,9 +4,11 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                      Version 0.0.4, 12 November 2023                        ;
+;                      Version 0.1.0, 10 December 2023                        ;
 ;                                                                             ;
 ;*****************************************************************************;
+
+API_VERSION     = 0x05 ; 0.0.5
 ;include "macros.inc"
   use32
   org    0
@@ -43,7 +45,7 @@ START:
         jnz     .err_settings
 
         ;init server socket
-        push    dword SO_NONBLOCK ; IPPROTO_TCP ?
+        push    dword SO_NONBLOCK ;IPPROTO_TCP 
         push    dword SOCK_STREAM
         push    dword AF_INET4
         call    netfunc_socket; AF_INET4, SOCK_STREAM, SO_NONBLOCK ; we dont want to block on accept
@@ -253,6 +255,8 @@ httpd_import:
         dd      0
 
 EXPORT_DATA:
+        dd      API_VERSION
+        dd      .size
         dd      netfunc_socket
         dd      netfunc_close
         dd      netfunc_bind
@@ -264,15 +268,25 @@ EXPORT_DATA:
         dd      FileRead
         dd      Alloc
         dd      Free
-        
+        dd      parse_http_query ; no stdcall
+
+        dd      send_resp
+        dd      create_resp
+        dd      destruct_resp
+        dd      set_http_status
+        dd      add_http_header
+        dd      del_http_header
+        dd      set_http_ver
+
         dd      base_response
         dd      GLOBAL_DATA
+.size = $ - EXPORT_DATA ; (count func)*4 + size(api ver) + 4
         dd      0
 ; DATA
 
 ;UDATA
 
-srv_backlog:    rd 1 ; максимум одновременных подключений подключений
+srv_backlog:    rd 1 ; maximum number of simultaneous open connections
 
 srv_socket:     rd 1
 
@@ -284,7 +298,7 @@ srv_sockaddr:
   .length       = $ - srv_sockaddr
 
 GLOBAL_DATA:
-        .units          rd 1 ; указатель на двусвязный не кольцевой(null terminator) список
+        .units          rd 1 ; pointer to a doubly connected non-cyclic list (null terminator)
                              ; next, prev, ptr of httpd_serv(), uri path 
         .work_dir       rb 1024 ; max size path to work directory
         .work_dir.size  rd 1 ; length string

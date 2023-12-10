@@ -1,30 +1,30 @@
 
-align   4
-day:
-                dd 'Mon,'
-                dd 'Tue,'
-                dd 'Wed,'
-                dd 'Thu,'
-                dd 'Fri,'
-                dd 'Sat,'
-                dd 'Sun,'
-.count = ($ - day) / 4
-
-align   4
-months:
-                dd 'Jan '
-                dd 'Feb '
-                dd 'Mar '
-                dd 'Apr '
-                dd 'May '
-                dd 'Jun '
-                dd 'Jul '
-                dd 'Aug '
-                dd 'Sep '
-                dd 'Oct '
-                dd 'Nov '
-                dd 'Dec '
-.count = ($ - months) / 4 ; count item in this array
+;align   4
+;day:
+;                dd 'Mon,'
+;                dd 'Tue,'
+;                dd 'Wed,'
+;                dd 'Thu,'
+;                dd 'Fri,'
+;                dd 'Sat,'
+;                dd 'Sun,'
+;.count = ($ - day) / 4
+;
+;align   4
+;months:
+;                dd 'Jan '
+;                dd 'Feb '
+;                dd 'Mar '
+;                dd 'Apr '
+;                dd 'May '
+;                dd 'Jun '
+;                dd 'Jul '
+;                dd 'Aug '
+;                dd 'Sep '
+;                dd 'Oct '
+;                dd 'Nov '
+;                dd 'Dec '
+;.count = ($ - months) / 4 ; count item in this array
 
 ;       HTTP-date    = rfc1123-date | rfc850-date | asctime-date
 ;       rfc1123-date = wkday "," SP date1 SP time SP "GMT"
@@ -49,16 +49,16 @@ months:
 
 
 
-serv_header:
-        .Accept_Ranges  db 'Accept-Ranges: bytes',13,10
-        .connection     db 'Connection: close',0
+;serv_header:
+;        .Accept_Ranges  db 'Accept-Ranges: bytes',13,10
+ ;       .connection     db 'Connection: close',0
 
-http_method:
-        .get:   db 'GET '
-        .head:  db 'HEAD'
-        .post:  db 'POST'
-        .put:   db 'PUT '
-        .patch  db 'PATCH'
+;http_method:
+;        .get:   db 'GET '
+;        .head:  db 'HEAD'
+;        .post:  db 'POST'
+;        .put:   db 'PUT '
+;        .patch  db 'PATCH'
 
 ;error_404:
 ;        db '<html>'
@@ -82,6 +82,9 @@ http_method:
 ;                db 'Connection: close', 13, 10
 ;                db 13, 10
 ;.size = $ - http_err_response
+
+default_http_version: db 'HTTP/1.1 '
+.length = $ - default_http_version
 
 http_response_err_501:
                 db 'HTTP/1.1 '
@@ -119,7 +122,7 @@ http_response_options:
 
 base_response:
 response: 
-                db 'HTTP/1.0 '
+                db 'HTTP/1.1 '
 .code = $ - response        
                 db '000 ',13, 10
                 db 'Server: simple-httpd/0.0.1', 13, 10 
@@ -134,11 +137,13 @@ response:
                 db '0000000000000000000000', 13, 10
                 db 'Content-type: '
 .content_type = $ - response  
-                db '                                                                ', 13, 10;
+                db 'text/html                                                       ', 13, 10;
                   ;'text/html; charset=utf-8'
-.end_headers:         ; for adding new headers, and save connection(keep-alive)
-.connection = $ - response    
-                db 'Connection: close', 13, 10
+                db 'Connection: '
+.connection = $ - response 
+                db 'close     ', 13, 10
+                ;  'keep-alive'
+.end_headers = $ - response ; for adding new headers
                 db 13, 10
 .body = $ - response          ; offset for add http body in simple response 
 
@@ -148,15 +153,15 @@ min_http_size   = 18
 
 MIME_FILE_FORMAT:
 .html:          db 5,'.html', 'text/html',0
-.css:           db 4,'.css', 'text/css',0
-.js:            db 3,'.js', 'text/javascript',0
-.txt:           db 4,'.txt', 'text/plain',0
-.pdf:           db 4,'.pdf', 'application/pdf',0
+.css:           db 4,'.css',  'text/css ',0
+.js:            db 3,'.js',   'text/javascript',0
+.txt:           db 4,'.txt',  'text/plain',0
+.pdf:           db 4,'.pdf',  'application/pdf',0
 .json:          db 5,'.json', 'application/json',0
 
-.png:           db 4,'.png', 'image/png',0
-.mp3:           db 4,'.mp3', 'audio/mpeg',0
-.mp4:           db 4,'.mp4', 'video/mp4',0
+.png:           db 4,'.png',  'image/png',0
+.mp3:           db 4,'.mp3',  'audio/mpeg',0
+.mp4:           db 4,'.mp4',  'video/mp4',0
 .other:         dd 0
                 db 'application/octet-stream',0 ; for unknow file - all file :)
 

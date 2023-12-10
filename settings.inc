@@ -27,6 +27,22 @@ struct HTTPD_UNIT
         uri_path        rb 4096-3*4
 ends
 
+struct RESPD
+        session         rd 1
+        flags           rd 1
+        http_status     rd 1
+        http_ver_ptr    rd 1
+        http_ver_len    rd 1
+        buffer          rd 1
+        buffer_size     rd 1
+        http_body       rd 1
+        count_header    rd 1
+        header.ptr      rd 1
+        header.len      rd 1
+                        rd 2*(64 - 1)
+ends
+
+
 struct REQUEST_DATA
         ptr_name        dd 0 ;
         ptr_data        dd 0 ;
@@ -41,6 +57,8 @@ load_settings:
         sub     esp, 16
         mov     esi, esp
         invoke  ini.get_str, ebp, ini_section_main, ini_key_ip, esi, 16, 0 ; ip
+        test    eax, eax
+        jnz     .error_exit2
         ; xxx.xxx.xxx.xxx\n - 16 byte max
         xor     edx, edx
         xor     eax, eax
@@ -76,7 +94,10 @@ load_settings:
         ; flags
 
         ; work_dir
-        invoke  ini.get_str, ebp, ini_section_main, ini_key_work_dir, GLOBAL_DATA.work_dir, 1024, 0 
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_work_dir, GLOBAL_DATA.work_dir, 1024, 0
+        test    eax, eax
+        jnz     .error_exit
+
         push    edi
         mov     ecx, 1024
         mov     edi, GLOBAL_DATA.work_dir
@@ -87,12 +108,14 @@ load_settings:
         mov     [GLOBAL_DATA.work_dir.size], edi
         pop     edi
 
-        ; TODO: get mime file
-        ;mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR
+        ; get mime file
         call    load_mime_file
 
         ; units_dir
         invoke  ini.get_str, ebp, ini_section_main, ini_key_units_dir, GLOBAL_DATA.unit_dir, 1024, 0 
+        test    eax, eax
+        jnz     .no_units
+
         push    edi
         mov     ecx, 1024
         mov     edi, GLOBAL_DATA.unit_dir
@@ -104,7 +127,7 @@ load_settings:
 
         ; get all units
         invoke  ini.enum_keys, ebp, ini_section_units, .add_unit
-
+.no_units:
         xor     eax, eax
         ret
 
@@ -176,7 +199,10 @@ load_settings:
 
 
 
-.err:
+.error_exit2:
+        add     esp, 16
+.error_exit:
+        mov     eax, -1
         ret
 
 
