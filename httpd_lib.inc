@@ -51,7 +51,6 @@
 
 ;serv_header:
 ;        .Accept_Ranges  db 'Accept-Ranges: bytes',13,10
- ;       .connection     db 'Connection: close',0
 
 ;http_method:
 ;        .get:   db 'GET '

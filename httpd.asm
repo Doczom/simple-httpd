@@ -8,16 +8,18 @@
 ;                                                                             ;
 ;*****************************************************************************;
 
-API_VERSION     = 0x05 ; 0.0.5
 ;include "macros.inc"
   use32
   org    0
   db     'MENUET01'
   dd     1, START, I_END, MEM, STACKTOP, PATH, 0
-include 'D:\kos\programs\macros.inc'
+include "macros.inc"
 purge mov,add,sub
-include 'D:\kos\programs\proc32.inc'
-include 'D:\kos\programs\dll.inc'
+
+include 'module_api.inc'
+
+include "proc32.inc"
+include "dll.inc"
 ;include 'D:\kos\programs\network.inc'
 ;KOS_APP_START
 
@@ -153,36 +155,37 @@ thread_connect:
         test    eax, eax
         jz      .err_parse
         ; find unit  for uri path
-        cmp     dword[GLOBAL_DATA.units], 0
-        jz      .no_units
+        cmp     dword[GLOBAL_DATA.modules], 0
+        jz      .no_modules
         
-        mov     eax, [GLOBAL_DATA.units]
+        mov     eax, [GLOBAL_DATA.modules]
 .next_unit:
         push    esi edi
         mov     esi, [esi + CONNECT_DATA.uri_path]
-        lea     edi, [eax + HTTPD_UNIT.uri_path]
+        lea     edi, [eax + HTTPD_MODULE.uri_path]
 @@:
         cmpsb
         jne     @f
 
         cmp     byte[edi - 1], 0
         jne     @b
-        ; found unit
+        ; found module
         pop     edi esi
         
-        push    esi
-        call    dword[eax + HTTPD_UNIT.httpd_serv] ; call unit function
+        push    dword[eax + HTTPD_MODULE.pdata] ; context of module
+        push    esi                           ; coutext of request
+        call    dword[eax + HTTPD_MODULE.httpd_serv] ; call unit function
 
         jmp     .end_work
 @@:
         pop     edi esi
 
-        mov     eax, [eax] ; HTTPD_UNIT.next
+        mov     eax, [eax] ; HTTPD_MODULE.next
         test    eax, eax ; terminate list
         jne     .next_unit
 
-.no_units:
-        ; if not found units, call file_server
+.no_modules:
+        ; if not found modules, call file_server
         call    file_server ; esi - struct 
         ; end work thread
         jmp     .end_work
@@ -232,29 +235,31 @@ import  libini,\
 
 default_ini_path: db 'httpd.ini',0
 
-ini_section_units:      db 'UNITS',0
+ini_section_units:      db 'MODULES',0
 ini_section_main:       db 'MAIN', 0
 
 ini_key_ip              db 'ip',0
 ini_key_port            db 'port',0
 ini_key_conn            db 'conn',0
-;ini_key_flags           db 'flags',0
+ini_key_flags           db 'flags',0
 ini_key_work_dir        db 'work_dir',0
-ini_key_units_dir       db 'units_dir',0
+ini_key_modules_dir     db 'modules_dir',0
 ini_key_mime_file       db 'mime_file',0
 
-httpd_unit_init         db 'httpd_init',0
-httpd_unit_serv         db 'httpd_serv',0
+httpd_module_init       db 'httpd_init',0
+httpd_module_serv       db 'httpd_serv',0
+httpd_module_close      db 'httpd_close',0
 
-IMPORT_UNIT:
-        dd      httpd_import, GLOBAL_DATA.unit_dir, 0
+IMPORT_MODULE:
+        dd      httpd_import, GLOBAL_DATA.modules_dir, 0
 
 httpd_import:
-.init   dd      httpd_unit_init  
-.serv   dd      httpd_unit_serv
+.init   dd      httpd_module_init
+.serv   dd      httpd_module_serv
+.close  dd      httpd_module_close
         dd      0
 
-EXPORT_DATA:
+EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      API_VERSION
         dd      .size
         dd      netfunc_socket
@@ -277,6 +282,9 @@ EXPORT_DATA:
         dd      add_http_header
         dd      del_http_header
         dd      set_http_ver
+        dd      find_uri_arg
+        dd      find_header
+        dd      close_server
 
         dd      base_response
         dd      GLOBAL_DATA
@@ -298,15 +306,16 @@ srv_sockaddr:
   .length       = $ - srv_sockaddr
 
 GLOBAL_DATA:
-        .units          rd 1 ; pointer to a doubly connected non-cyclic list (null terminator)
+        .modules        rd 1 ; pointer to a doubly connected non-cyclic list (null terminator)
                              ; next, prev, ptr of httpd_serv(), uri path 
-        .work_dir       rb 1024 ; max size path to work directory
-        .work_dir.size  rd 1 ; length string
-        .unit_dir       rb 1024
-        .unit_dir.end   rd 1
+        .work_dir              rb 1024 ; max size path to work directory
+        .work_dir.size         rd 1 ; length string
+        .modules_dir           rb 1024
+        .modules_dir.end       rd 1
 
-        .MIME_types_arr rd 1
-;        .flags          rd 1 
+        .MIME_types_arr        rd 1
+        .flags                 rd 1
+        ._module_cmd           rd 1
 
 PATH:
         rb 256

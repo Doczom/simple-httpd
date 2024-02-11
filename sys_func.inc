@@ -218,13 +218,6 @@ FileRead:
 
 
 
-FLAG_KEEP_ALIVE = 0x01
-FLAG_ADD_DATE   = 0x02 ;(not supported)
-FLAG_NO_SET_CACHE  = 0x04 ;(not supported)
-FLAG_NO_CONTENT_ENCODING = 0x08 ;(not supported)
-
-
-
 
 ;RESPD* stdcall create_resp(CONNECT_DATA* session, uint32_t flags)
 create_resp:
@@ -244,7 +237,7 @@ create_resp:
 .exit:
         ret     8
 
-;void destruct_resp(RESPD* ptr)
+;void stdcall destruct_resp(RESPD* ptr)
 destruct_resp:
         stdcall Free, [esp + 4]
         ret     4
@@ -452,3 +445,71 @@ send_resp:
         mov     eax, -1
         jmp     .exit
 
+
+
+;char* find_uri_arg(CONNECT_DATA* session, char* key)
+find_uri_arg:
+        push    esi edi
+        mov     edx, [esp + 4*2 + 4]
+        mov     ecx, [edx + CONNECT_DATA.num_uri_args]
+        mov     esi, [esp + 4*2 + 8]
+        mov     edx, [edx + CONNECT_DATA.uri_arg]
+        test    ecx, ecx
+        jz      .not_found
+.loop:
+        mov     edi, [edx]
+        push    esi
+@@:
+        cmpsb
+        jne     @f
+        cmp     byte[esi - 1], 0
+        jne     @b
+
+        pop     esi
+        mov     eax, [edx + 4]
+        jmp     .exit
+@@:
+        pop     esi
+        add     edx, 4*2 ; size array item
+        loop    .loop
+.not_found:
+        xor     eax, eax
+.exit:
+        pop     edi esi
+        ret     8
+
+;char* find_header(CONNECT_DATA* session, char* key)
+find_header:
+        push    esi edi
+        mov     edx, [esp + 4*2 + 4]
+        mov     ecx, [edx + CONNECT_DATA.num_headers]
+        mov     esi, [esp + 4*2 + 8]
+        mov     edx, [edx + CONNECT_DATA.http_headers]
+        test    ecx, ecx
+        jz      .not_found
+.loop:
+        mov     edi, [edx]
+        push    esi
+@@:
+        cmpsb
+        jne     @f
+        cmp     byte[esi - 1], 0
+        jne     @b
+
+        pop     esi
+        mov     eax, [edx + 4]
+        jmp     .exit
+@@:
+        pop     esi
+        add     edx, 4*2 ; size array item
+        loop    .loop
+.not_found:
+        xor     eax, eax
+.exit:
+        pop     edi esi
+        ret     8
+
+;void close_server()
+close_server:
+
+        ret

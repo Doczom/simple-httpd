@@ -1,70 +1,11 @@
 format MS COFF
 public @EXPORT as 'EXPORTS'
 
-API_VERSION     = 0x05
-FLAG_KEEP_ALIVE = 0x01
+include "macros.inc"
+
+include '../module_api.inc'
 
 NO_DEBUG_INPUT = 0
-include 'D:\kos\programs\macros.inc'
-
-struct IMPORT_DATA
-        version         rd 1 ; dword for check api
-        sizeof          rd 1 ; size struct
-        netfunc_socket  rd 1
-        netfunc_close   rd 1
-        netfunc_bind    rd 1
-        netfunc_accept  rd 1
-        netfunc_listen  rd 1
-        netfunc_recv    rd 1
-        netfunc_send    rd 1
-        FileInfo        rd 1
-        FileRead        rd 1
-        Alloc           rd 1
-        Free            rd 1
-        parse_http_query rd 1
-        ;send_resp(RESPD* ptr, char* content, uint32_t length)
-        ;create_resp(CONNECT_DATA* session, uint32_t flags)
-        ;       FLAG_KEEP_ALIVE = 0x01
-        ;       FLAG_ADD_DATE   = 0x02 ;(not supported)
-        ;       FLAG_NO_SET_CACHE  = 0x04 ;(not supported)
-        ;       FLAG_NO_CONTENT_ENCODING = 0x08 ;(not supported)
-        ;       
-        ;destruct_resp(RESPD* ptr)
-        ;set_http_status(RESPD* ptr, uint32_t status) ; status in '200' format, 
-        ;add_http_header(RESPD* ptr, char* ptr_header)
-        ;del_http_header(RESPD* ptr, char* ptr_header) ; no del std header
-        ;set_http_ver(RESPD* ptr, char* version) ; example: RTSP/1.1
-        send_resp       rd 1
-        create_resp     rd 1
-        destruct_resp   rd 1
-        set_http_status rd 1
-        add_http_header rd 1
-        del_http_header rd 1
-        set_http_ver    rd 1
-        
-        base_response   rd 1
-        GLOBAL_DATA     rd 1
-ends
-
-struct CONNECT_DATA ; 16*4 = 64 bytes
-        socket          dd 0 ; номер сокета подключения
-        sockaddr        dd 16/4 ; socaddr connection
-        buffer_request  dd 0 ; pointer to buffer for geting message socket
-        request_size    dd 0 ; size geted data from client
-        end_buffer_request dd 0 ; для парсера 
-        buffer_response dd 0 ; pointer to buffwr for resp message 
-        http_method     dd 0 ; указатель на строку
-        http_verion     dd 0 ; указатель на строку
-        num_headers     dd 0 ; number items in REQUEST_DATA
-        http_headers    dd 0 ; указатель на массив REQUEST_DATA
-        uri_scheme      dd 0 ; указатель на схему
-        uri_authority   dd 0 ; pointer to struct ?
-        uri_path        dd 0 ; указатель на декодированный путь к ресурсу(без параметров)
-        num_uri_args    dd 0 ;
-        uri_arg         dd 0 ; pointer to array REQUEST_DATA аргументов uri строк
-        uri_fragment    dd 0 ; указатель на строку
-        message_body    dd 0 ; указатель на тело http запроса
-ends
 
 macro board_input message {
 if NO_DEBUG_INPUT = 0
@@ -89,7 +30,7 @@ end if
 section '.flat' code readable align 16
 
 unit_init:
-        mov     eax, -1
+        xor     eax, eax
         push    esi edi
         mov     esi, [esp + 4*2 + 4]
         mov     [import_httpd], esi
@@ -102,10 +43,10 @@ unit_init:
         shr     ecx, 2 ; div 4
         rep movsd
 
-        xor     eax, eax
+        mov     eax, 1 ;no zero return - unit init successful
 .exit:
         pop     edi esi
-        ret     4
+        ret     8
 
 
 server_entry:
@@ -165,7 +106,7 @@ server_entry:
         board_input 'create message'
         ; create http message
         push    dword 8*1024
-        call    [IMPORT + IMPORT_DATA.Alloc]
+        call    [IMPORT.Alloc]
         test    eax, eax 
         jz      .exit
 
@@ -214,12 +155,17 @@ server_entry:
         push    sceleton_resp.size
         push    edi
         push    dword[esi + CONNECT_DATA.socket]
-        call    [IMPORT + IMPORT_DATA.netfunc_send]
+        call    [IMPORT.netfunc_send]
 
         board_input 'send'
 .exit:
         pop     edi esi
+        ret     8
+
+server_close:
+
         ret     4
+
 
 section '.data' data readable writable align 16
 
@@ -263,7 +209,8 @@ text_message:
 @EXPORT:
 export  \
         unit_init,       'httpd_init', \
-        server_entry,    'httpd_serv'
+        server_entry,    'httpd_serv',\
+        server_close,    'httpd_close'
 
 
 IMPORT IMPORT_DATA ; 

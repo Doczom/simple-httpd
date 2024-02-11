@@ -1,7 +1,7 @@
 ; This is a module for processing standard requests to get a file along 
 ; a path that does not belong to another module.
 
-SIZE_FILE_BUFFER        = 64*1024 
+SIZE_FILE_BUFFER        = 64*1024
 
 file_server:
 
@@ -258,7 +258,10 @@ file_server:
 Get_MIME_Type:
         push    esi edi
         mov     eax, [esp + 4*2 + 4]
+        mov     edx, [eax + FILED.path]
         mov     eax, [eax + FILED.end_path]
+        push    eax
+        sub     [esp], edx
         mov     edx, [GLOBAL_DATA.MIME_types_arr]
 @@:
         mov     esi, [edx]
@@ -268,12 +271,16 @@ Get_MIME_Type:
         
         mov     edi, eax
         movzx   ecx, byte [esi]
+        cmp     ecx, [esp]
+        jae     @b
+
         inc     esi
         sub     edi, ecx
         repe cmpsb
         jne     @b
 @@:
         mov     eax, esi
+        pop     edi ;clear value in stack
         pop     edi esi 
         ret 4
 .other:

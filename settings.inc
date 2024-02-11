@@ -1,30 +1,14 @@
 
 
-struct CONNECT_DATA ; 16*4 = 64 bytes
-        socket          dd 0 ; номер сокета подключения
-        sockaddr        dd 16/4 ; socaddr connection
-        buffer_request  dd 0 ; pointer to buffer for geting message socket
-        request_size    dd 0 ; size geted data from client
-        end_buffer_request dd 0 ; для парсера 
-        buffer_response dd 0 ; pointer to buffwr for resp message 
-        http_method     dd 0 ; указатель на строку
-        http_verion     dd 0 ; указатель на строку
-        num_headers     dd 0 ; number items in REQUEST_DATA
-        http_headers    dd 0 ; указатель на массив REQUEST_DATA
-        uri_scheme      dd 0 ; указатель на схему
-        uri_authority   dd 0 ; pointer to struct ?
-        uri_path        dd 0 ; указатель на декодированный путь к ресурсу(без параметров)
-        num_uri_args    dd 0 ;
-        uri_arg         dd 0 ; pointer to array REQUEST_DATA аргументов uri строк
-        uri_fragment    dd 0 ; указатель на строку
-        message_body    dd 0 ; указатель на тело http запроса
-ends
 
-struct HTTPD_UNIT
+
+struct HTTPD_MODULE
         next            rd 1
         prev            rd 1
+        httpd_close     rd 1
         httpd_serv      rd 1
-        uri_path        rb 4096-3*4
+        pdata           rd 1
+        uri_path        rb 4096-5*4
 ends
 
 struct RESPD
@@ -112,89 +96,101 @@ load_settings:
         call    load_mime_file
 
         ; units_dir
-        invoke  ini.get_str, ebp, ini_section_main, ini_key_units_dir, GLOBAL_DATA.unit_dir, 1024, 0 
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_modules_dir, GLOBAL_DATA.modules_dir, 1024, 0
         test    eax, eax
-        jnz     .no_units
+        jnz     .no_modules
 
         push    edi
         mov     ecx, 1024
-        mov     edi, GLOBAL_DATA.unit_dir
+        mov     edi, GLOBAL_DATA.modules_dir
         xor     eax, eax
         repne scasb
         mov     byte[edi-1], '/'
-        mov     [GLOBAL_DATA.unit_dir.end], edi
+        mov     [GLOBAL_DATA.modules_dir.end], edi
         pop     edi
 
         ; get all units
-        invoke  ini.enum_keys, ebp, ini_section_units, .add_unit
-.no_units:
+        invoke  ini.enum_keys, ebp, ini_section_units, .add_module
+.no_modules:
         xor     eax, eax
         ret
 
-.add_unit: ; [esp + 4*3] - name [esp + 4*4] - value
+.add_module: ; [esp + 4*3] - name [esp + 4*4] - value
         ; add new item in list 
-        push    dword sizeof.HTTPD_UNIT
+        push    dword sizeof.HTTPD_MODULE
         call    Alloc
         test    eax, eax
-        jz      .add_unit.exit 
+        jz      .add_module.exit
         
-        mov     ecx, [GLOBAL_DATA.units]
-        mov     [eax + HTTPD_UNIT.next], ecx
-        mov     dword[eax + HTTPD_UNIT.prev], GLOBAL_DATA.units
-        mov     [GLOBAL_DATA.units], eax
+        mov     ecx, [GLOBAL_DATA.modules]
+        mov     [eax + HTTPD_MODULE.next], ecx
+        mov     dword[eax + HTTPD_MODULE.prev], GLOBAL_DATA.modules
+        mov     [GLOBAL_DATA.modules], eax
         test    ecx, ecx
         jnz     @f
-        mov     [ecx + HTTPD_UNIT.prev], eax
+        mov     [ecx + HTTPD_MODULE.prev], eax
 @@:
         ; copy uri path
         push    esi edi
         mov     esi, [esp + 4*2 + 4*3] ; name
-        lea     edi, [eax + HTTPD_UNIT.uri_path + 1]
+        lea     edi, [eax + HTTPD_MODULE.uri_path + 1]
         mov     byte[edi - 1], '/'
 @@:
         movsb
         cmp     byte[edi - 1], 0
         jne     @b
         ; copy file name
-        mov     edi, [GLOBAL_DATA.unit_dir.end]
+        mov     [GLOBAL_DATA._module_cmd], 0
+        mov     edi, [GLOBAL_DATA.modules_dir.end]
         mov     esi, [esp + 4*2 + 4*4]
 @@:
         movsb
         cmp     byte[edi - 1], 0
-        jne     @b
+        je     @f
 
+        cmp     byte[esi - 1], ';'
+        jne     @b
+        mov     byte[edi - 1], 0
+        mov     [GLOBAL_DATA._module_cmd], esi
+@@:
         pop     edi esi
         mov     esi, eax 
         ; load library
         push    esi
-        stdcall dll.Load, IMPORT_UNIT
+        stdcall dll.Load, IMPORT_MODULE
         pop     esi
         test    eax, eax
         jz      @f
 
- .add_unit.err:
+ .add_module.err:
         ; error
-        mov     eax, [esi + HTTPD_UNIT.next] ; next
-        mov     [GLOBAL_DATA.units], eax 
-        mov     dword[eax + HTTPD_UNIT.prev], GLOBAL_DATA.units
+        mov     eax, [esi + HTTPD_MODULE.next] ; next
+        mov     [GLOBAL_DATA.modules], eax
+        mov     dword[eax + HTTPD_MODULE.prev], GLOBAL_DATA.modules
         
         push    esi
         call    Free
         
-        jmp     .add_unit.exit 
+        jmp     .add_module.exit
 @@: ; good
-        ; init httpd unit
+        ; init httpd module
+        push    dword[GLOBAL_DATA._module_cmd]
         push    dword EXPORT_DATA
         invoke  httpd_import.init
+
         test    eax, eax 
-        jnz      .add_unit.err
+        jz      .add_module.err
 
+        mov     [esi + HTTPD_MODULE.pdata], eax
         mov     eax, [httpd_import.serv]
-        mov     dword[esi + HTTPD_UNIT.httpd_serv], eax
+        mov     dword[esi + HTTPD_MODULE.httpd_serv], eax
+        mov     eax, [httpd_import.close]
+        mov     dword[esi + HTTPD_MODULE.httpd_close], eax
 
-        mov     [httpd_import.init], httpd_unit_init
-        mov     [httpd_import.serv], httpd_unit_serv
-.add_unit.exit:        
+        mov     [httpd_import.init], httpd_module_init
+        mov     [httpd_import.serv], httpd_module_serv
+        mov     [httpd_import.close], httpd_module_close
+.add_module.exit:
         ret 16
 
 
