@@ -38,6 +38,9 @@ ends
 load_settings:
         mov     ebp, ecx
 
+        mov     dword[srv_stop], 0
+        mov     dword[srv_shutdown], 0
+
         sub     esp, 16
         mov     esi, esp
         invoke  ini.get_str, ebp, ini_section_main, ini_key_ip, esi, 16, 0 ; ip

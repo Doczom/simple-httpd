@@ -24,27 +24,7 @@ unit_init:
         shr     ecx, 2 ; div 4
         rep movsd
 
-        ; create unit context
-        invoke  IMPORT.Alloc, 4096 ; for cmd path
-        test    eax, eax
-        jz      .exit
-
-        mov     dword[eax], 0
-        mov     esi, [esp + 4*2 + 8]
-        lea     edi, [eax + 4]
-        test    esi, esi
-        jz      .exit
-        pushfd
-        cld
-@@:
-        cmp     byte[esi], 0
-        jz      @f
-        movsb
-        inc     dword[eax]
-        jmp     @b
-@@:
-        popfd
-        ;unit init successful
+        mov     eax, 1 ;no zero return - module init successful
 .exit:
         pop     edi esi
         ret     8
@@ -54,30 +34,28 @@ server_entry:
         push    esi edi
         mov     esi, [esp + 4*2 + 4] ; request context
 
-        mov     edi, [esp + 4*2 + 8] ; unit context
-        cmp     dword[edi], 0
-        je      .no_cmd
-
-        add     edi, 4
-        invoke  IMPORT.create_resp, esi, 0
+        invoke  IMPORT.create_resp, esi, FLAG_TRANSFER_CHUNKED\
+                                       + FLAG_NO_CONTENT_LENGTH\
+                                       + FLAG_NO_SERVER_HEADER\
+                                       + FLAG_NO_CONTENT_ENCODING\
+                                       + FLAG_NO_CONNECTION\
+                                       + FLAG_NO_CACHE_CONTROL
         test    eax, eax
         jz      .exit
 
         push    eax
-        invoke  IMPORT.send_resp, eax, edi, [edi - 4]
-        invoke  IMPORT.destruct_resp ; arg in stack
+        mov     edi, eax
+        invoke  IMPORT.begin_send_resp, edi, 0, 0
+
+        invoke  IMPORT.send_resp, edi, text_no_cmd, text_no_cmd.size
+        invoke  IMPORT.send_resp, edi, text_no_cmd2, text_no_cmd2.size
+        invoke  IMPORT.send_resp, edi, text_no_cmd3, text_no_cmd3.size
+
+        invoke  IMPORT.finish_send_resp, edi
+        invoke  IMPORT.destruct_resp
 .exit:
         pop     edi esi
         ret     8
-.no_cmd:
-        invoke  IMPORT.create_resp, esi, 0
-        test    eax, eax
-        jz      .exit
-
-        push    eax
-        invoke  IMPORT.send_resp, eax, text_no_cmd, text_no_cmd.size
-        invoke  IMPORT.destruct_resp
-        jmp     .exit
 
 server_close:
 
@@ -87,8 +65,14 @@ server_close:
 section '.data' data readable writable align 16
 
 text_no_cmd:
-        db 'For this unit in config not set arguments'
+        db 'chunk 1<br>'
 .size = $ - text_no_cmd
+text_no_cmd2:
+        db 'chunk 2 - new size chunk<br>'
+.size = $ - text_no_cmd2
+text_no_cmd3:
+        db 'chunk 3 - end chunk'
+.size = $ - text_no_cmd3
 
 @EXPORT:
 export  \

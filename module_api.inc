@@ -6,11 +6,18 @@
 
 API_VERSION     = 0x100 ; 0.1.0
 
-FLAG_KEEP_ALIVE = 0x01
-FLAG_ADD_DATE   = 0x02 ;(not supported)
-FLAG_NO_SET_CACHE  = 0x04 ;(not supported)
-FLAG_NO_CONTENT_ENCODING = 0x08 ;(not supported)
-FLAG_TRASFER_CHUNKED = 0x10 ;(not supported)
+FLAG_KEEP_ALIVE          = 0x01
+FLAG_NO_CONNECTION       = 0x02
+FLAG_NO_SERVER_HEADER    = 0x04
+FLAG_NO_CONTENT_ENCODING = 0x08
+FLAG_NO_DATE             = 0x10 ;(not supported)
+
+FLAG_NO_CONTENT_LENGTH   = 0x20
+FLAG_NO_CONTENT_TYPE     = 0x40
+FLAG_NO_CACHE_CONTROL    = 0x80
+
+FLAG_TRANSFER_CHUNKED    = 0x100
+FLAG_RAW_STREAM          = 0x200
 
 struct CONNECT_DATA ; 16*4 = 64 bytes
         socket          dd 0 ; номер сокета подключения
@@ -64,14 +71,17 @@ struct IMPORT_DATA
         ;   no del std header
         set_http_ver    rd 1
         ; void set_http_ver(RESPD* ptr, char* version, uint32_t length);
-        ;   example: 'RTSP/1.1 '
+        ;   example: 'RTSP/1.1'
         find_uri_arg    rd 1
         ;char* find_uri_arg(CONNECT_DATA* session, char* key);
         find_header     rd 1
         ;char* find_header(CONNECT_DATA* session, char* key);
         close_server    rd 1
         ;void close_server();
-
+        begin_send_resp rd 1
+        ;uint32_t begin_send_resp(RESPD* ptr, uint64_t content_length);
+        finish_send_resp rd 1
+        ;uint32_t finish_send_resp(RESPD* ptr);
 
         base_response   rd 1
         GLOBAL_DATA     rd 1

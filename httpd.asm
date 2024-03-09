@@ -1,10 +1,10 @@
 ;*****************************************************************************;
-;      Copyright (C) 2023, Mikhail Frolov aka Doczom . All rights reserved.   ;
+;  Copyright (C) 2023-2024, Mikhail Frolov aka Doczom . All rights reserved.  ;
 ;            Distributed under terms of the 3-Clause BSD License.             ;
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                      Version 0.1.0, 10 December 2023                        ;
+;                        Version 0.2.2, 10 March 2024                         ;
 ;                                                                             ;
 ;*****************************************************************************;
 
@@ -36,10 +36,12 @@ START:
         test    eax, eax
         jnz     .err_settings  
 
-        mov     ecx, PATH
-        cmp     byte[ecx],0
-        jnz     @f
         mov     ecx, default_ini_path
+        cmp     byte[PATH],0
+        jz      @f
+
+        mov     ecx, PATH
+
 @@:
         ; get settings
         call    load_settings ; ecx -> string to config file
@@ -70,14 +72,21 @@ START:
         jz      .listen_err
 
 .mainloop:
-        mcall   23, 100 ; get event to network stack 
+        cmp     dword[srv_shutdown], 1
+        jz      .shutdown
+
+        mcall   23, 100 ; get event to network stack
         test    eax, eax
+        jz      .mainloop
+
+        cmp     dword[srv_stop], 1
         jz      .mainloop
 
         push    dword thread_connect
         call    CreateThread ; not save PID
         jmp     .mainloop
 
+.shutdown:
 .listen_err:
 .bind_err:
         push    dword[srv_socket]
@@ -237,6 +246,7 @@ default_ini_path: db 'httpd.ini',0
 
 ini_section_units:      db 'MODULES',0
 ini_section_main:       db 'MAIN', 0
+ini_section_tls         db 'TLS',0
 
 ini_key_ip              db 'ip',0
 ini_key_port            db 'port',0
@@ -285,6 +295,8 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      find_uri_arg
         dd      find_header
         dd      close_server
+        dd      begin_send_resp
+        dd      finish_send_resp
 
         dd      base_response
         dd      GLOBAL_DATA
@@ -293,7 +305,8 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
 ; DATA
 
 ;UDATA
-
+srv_stop:       rd 1 ; set 1 for skip new connections
+srv_shutdown:   rd 1 ; set 1 for ending working server
 srv_backlog:    rd 1 ; maximum number of simultaneous open connections
 
 srv_socket:     rd 1

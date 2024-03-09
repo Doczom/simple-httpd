@@ -82,16 +82,52 @@
 ;                db 13, 10
 ;.size = $ - http_err_response
 
-default_http_version: db 'HTTP/1.1 '
+default_http_version:
+                db 'HTTP/1.1 '
 .length = $ - default_http_version
+
+default_http_connection:
+                db 'Connection: '
+.value =  $ - default_http_connection
+                db 'close     ', 13, 10 ; or keep-alive
+.length = $ - default_http_connection
+
+default_http_cont_encod:
+                db 'Content-Encoding: identity', 13, 10
+.length = $ - default_http_cont_encod
+
+default_http_cont_type:
+                db 'Content-type: text/html', 13, 10
+.length = $ - default_http_cont_type
+
+default_http_cache_ctl:
+                db 'Cache-Control: no-cache', 13, 10
+.length = $ - default_http_cache_ctl
+
+default_http_cont_len:
+                db 'Content-length: '
+                db '0000000000000000000000', 13, 10
+.length = $ - default_http_cont_len
+
+default_http_header_server:
+                db 'Server: simple-httpd/0.3.0', 13, 10
+.length = $ - default_http_header_server
+
+http_header_transfer_chunked:
+                db 'Transfer-Encoding: chunked', 13, 10
+.length = $ - http_header_transfer_chunked
+
+;default_http_date_header:
+;                db 'Date: '
+;.date:          db 'Sun, 30 Oct 2022 09:29:13 GMT',13, 10
+;.length = $ - default_http_date_header
+
 
 http_response_err_501:
                 db 'HTTP/1.1 '
                 db '501 ',13, 10
                 db 'Error parsing your request message. The version is not supported or another error.'
-                db 'Server: simple-httpd/0.0.1', 13, 10
-                ;db 'Content-length: 91', 13, 10
-                ;db 'Content-type: text/plain', 13, 10;
+                db 'Server: simple-httpd/0.3.0', 13, 10
                 db 'Connection: close', 13, 10
                 db 13, 10
 .size = $ - http_response_err_501
@@ -99,7 +135,7 @@ http_response_err_501:
 http_response_err_404:
                 db 'HTTP/1.1 '
                 db '404 ',13, 10
-                db 'Server: simple-httpd/0.0.1', 13, 10
+                db 'Server: simple-httpd/0.3.0', 13, 10
                 db 'Content-length: 45', 13, 10
                 db 'Content-type: text/plain', 13, 10;
                 db 'Connection: close', 13, 10
@@ -110,7 +146,7 @@ http_response_err_404:
 http_response_options:
                 db 'HTTP/1.1 '
                 db '204 ',13, 10
-                db 'Server: simple-httpd/0.0.1', 13, 10
+                db 'Server: simple-httpd/0.3.0', 13, 10
                 db 'Allow: OPTIONS, GET, POST', 13, 10
                 db 'Connection: close', 13, 10
                 db 13, 10
@@ -124,7 +160,7 @@ response:
                 db 'HTTP/1.1 '
 .code = $ - response        
                 db '000 ',13, 10
-                db 'Server: simple-httpd/0.0.1', 13, 10 
+                db 'Server: simple-httpd/0.3.0', 13, 10
                 db 'Cache-Control: no-cache', 13, 10
                 db 'Content-Encoding: '
 .content_encod = $ - response 
@@ -179,3 +215,6 @@ STD_MIME_TYPE_ARR:
 _DIV_10_:       dd 10
 _DIV_100_:      dd 100
 _DIV_1000_:     dd 1000
+
+hex_chars:
+        db '0123456789ABCDEF'

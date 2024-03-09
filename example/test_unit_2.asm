@@ -138,7 +138,7 @@ server_entry:
 .send_data: ; eax - ptr to buffer
         mov     edi, eax
         board_input 'create_resp'
-        invoke  IMPORT.create_resp, esi, 0
+        invoke  IMPORT.create_resp, esi, FLAG_KEEP_ALIVE
         test    eax, eax
         jz      .exit
 
@@ -153,7 +153,8 @@ server_entry:
 .err_404:
         ; send resp 404
         board_input 'err404'
-        invoke  IMPORT.create_resp, esi, 0
+        invoke  IMPORT.create_resp, esi, FLAG_NO_CACHE_CONTROL\
+                                       + FLAG_NO_CONTENT_ENCODING
         test    eax, eax
         jz      .exit
         
