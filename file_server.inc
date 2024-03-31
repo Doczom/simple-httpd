@@ -1,7 +1,7 @@
 ; This is a module for processing standard requests to get a file along 
 ; a path that does not belong to another module.
 
-SIZE_FILE_BUFFER        = 64*1024
+SIZE_FILE_BUFFER        = 1400*23;64*1024
 
 file_server:
 
@@ -36,13 +36,9 @@ file_server:
         ; memory alloced on stack and for working program alloced with buffer 
         ; for code stack 
         lea     edx, [esp - 6*1024 - 4096] ; edx <- buffer for full path
-        
-        mov     edi, edx
-        sub     edi, sizeof.FILED; edi <- struct FILED 
-        mov     [edi + FILED.path], edx
-        
-        mov     eax, esi
+
         push    esi edi
+        mov     eax, esi
         ;; copy work_dir
         mov     esi, GLOBAL_DATA.work_dir
         mov     edi, edx
@@ -55,23 +51,21 @@ file_server:
         cmp     byte[esi - 1], 0
         jne     @b
 
-        mov     eax, edi
-        dec     eax
         pop     edi esi
-        mov     [edi + FILED.end_path], eax
+        ; init FILED
+        mov     edi, edx
+        sub     edi, sizeof.FILED; edi <- struct FILED 
+        stdcall FileInitFILED, edi, edx
 
         ;; check file info (skip of directory and if syscall return error)
         lea     eax, [edi - 40] ; buffer for file info
-        mov     [edi + FILED.buffer], eax
 
-        push    edi
-        call    FileInfo
+        stdcall FileInfo, edx, eax
         test    eax, eax 
         jnz     .err_not_found
 
         test    dword[edi - 40], 11000b ; check dir OR disk partition
         jnz     .err_not_found
-
 
         ; check method OPTIONS
         mov     ecx, [esi + CONNECT_DATA.http_method]
@@ -89,135 +83,61 @@ file_server:
         jne     .err_http_501
 
 .send_file:
-        ; create http response (set 200 code, MINE type and length of body)
-        ;; alloc 33 kib 
-        push    dword SIZE_FILE_BUFFER
-        call    Alloc
+        ; edi -> FILED
+        ; edi-40 ->FILEINFO
+        ; esi -> CONNECT_DATA
+        stdcall create_resp, esi, FLAG_NO_CONTENT_TYPE\
+                                + FLAG_RAW_STREAM
         test    eax, eax
-        jz      .err_http_501 ; error memory
+        jz      .err_http_501
+        mov     ebp, eax
 
-        push    esi
-        push    edi
-        push    eax ; save pointer for Free
+        stdcall Alloc, SIZE_FILE_BUFFER
+        test    eax, eax
+        jz      .err_http_501_1
 
-        mov     esi, base_response
-        mov     ecx, response.body
-        mov     edi, [esp]
+        ; Add content type header
+        push    eax esi edi
+        mov     esi, default_http_cont_type
+        mov     edi, eax
+        mov     ecx, default_http_cont_type.length
         rep movsb
 
-        mov     edi, [esp]
-        mov     dword[edi + response.code], '200 '
-        
-        mov     dword[edi + response.connection], 'keep'
-        mov     dword[edi + response.connection + 4], '-ali'
-        mov     word[edi + response.connection + 8], 've'
-        
-        
-        push    dword[esp + 4] ; <-FILED
-        call    Get_MIME_Type
+        mov     dword[eax + default_http_cont_type.value], '    '
+        mov     dword[eax + default_http_cont_type.value + 4], '    '
+        mov     dword[eax + default_http_cont_type.value + 8], '    '
+        lea     edi, [eax + default_http_cont_type.value]
 
-        add     edi, response.content_type
+        stdcall Get_MIME_Type, [esp]
         mov     esi, eax
 @@:
         movsb
         cmp     byte[esi], 0
         jne     @b
-        
-        
-        pop     edi ; buffer on 32 kib
-        pop     ebx ; FD
-        pop     esi ; CONNECT_DATA
-        
-        ; copy length
-        mov     edx, [ebx - 40 + 36]
-        mov     eax, [ebx - 40 + 32]
-        lea     ecx, [edi + response.content_len + 21]
-        test    eax, eax 
-        jne     @f
-        test    edx, edx
-        jz      .err_not_found_1
-@@:
-        cmp     edx, 1000 ; 999*4 - max length of file
-        jae     .err_not_found_1
-        ; edx:eax  ecx - end char in string '000000'
-.div1000:
-        div     dword[_DIV_1000_]
-        push    eax
+        pop     edi esi  ;!!!!! "pop eax" not runing
 
-        mov     eax, edx
-        xor     edx, edx
-;.div100:
-        div     dword[_DIV_100_]
-        push    eax
-        
-        mov     eax, edx
-        xor     edx, edx
-        div     dword[_DIV_10_]
-        add     byte[ecx], dl
-        add     byte[ecx - 1], al
-        sub     ecx, 3
+        mov     eax, [esp]
+        stdcall add_http_header, ebp, eax, default_http_cont_type.length-2 ; skip \n\r
+        ;cmp     eax, -1 ; error can`t running in this function(max 64 addition headers)
 
-        pop     eax
-        add     byte[ecx + 1], al
-        ;xor     edx, edx
-        ;test    eax, eax
-        ;jne     .div100
-        pop     eax
-        xor     edx, edx
+        stdcall begin_send_resp, ebp, [edi - 40 + 32], [edi - 40 + 36]
+        ;cmp     eax, -1
+.send_block_file:
+        mov     eax, [esp] ; allocated buffer
+        stdcall FileRead, edi, eax, SIZE_FILE_BUFFER
         test    eax, eax
-        jne     .div1000
+        jz      .finish_send_file
 
-        ;send_response_header 
-        push    dword 0 ; flags
-        push    response.body
-        push    edi
-        push    dword[esi + CONNECT_DATA.socket]
-        call    netfunc_send
-        cmp     eax, -1
-        je      .exit_free
+        mov     ecx, [esp]
+        stdcall send_resp, ebp, ecx, eax
+        ;cmp     eax, -1
+        jmp     .send_block_file
 
-        mov     dword[ebx + FILED.offset], 0
-        mov     dword[ebx + FILED.offset + 4], 0
-        mov     [ebx + FILED.buffer], edi
-        mov     [ebx + FILED.size], SIZE_FILE_BUFFER
-.send_response_body:
-        ; read 32 kib to file 
-        push    ebx
-        call    FileRead
-        test    eax, eax
-        jz      @f
-        cmp     eax, 6
+.finish_send_file:
+        stdcall Free
+        stdcall finish_send_resp, ebp
+        stdcall destruct_resp, ebp
 
-        mov     [0], eax
-        jne     .exit_free
-@@:
-        ; send this block data 
-        push    dword 0 ; flags
-        push    SIZE_FILE_BUFFER
-        push    edi
-        push    dword[esi + CONNECT_DATA.socket]
-        call    netfunc_send
-        cmp     eax, -1
-        je      .exit_free
-
-        ; check end file
-        mov     ecx, [ebx + FILED.offset + 4]
-        cmp     [ebx - 4], ecx
-        ja      .add_offset
-
-        mov     edx, [ebx + FILED.offset]
-        cmp     [ebx - 8], edx
-        jbe     .exit_free    
-
-.add_offset:
-        add     [ebx + FILED.offset], SIZE_FILE_BUFFER
-        adc     [ebx + FILED.offset + 4], 0
-
-        jmp     @b
-
-.exit_free:
-        push    edi
-        call    Free
         ret
 
 .send_options:
@@ -230,9 +150,6 @@ file_server:
 
         ret
 
-.err_not_found_1:
-        push    edi
-        call    Free
 .err_not_found:
         ; send error 404
         push    dword 0 ; flags
@@ -242,7 +159,8 @@ file_server:
         call    netfunc_send
 
         ret
-
+.err_http_501_1:
+        stdcall Free, ebp
 .err_http_501:
         ; send error 501
         push    dword 0 ; flags
@@ -252,7 +170,6 @@ file_server:
         call    netfunc_send
 
         ret
-
 
 ; char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
 Get_MIME_Type:

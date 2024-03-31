@@ -187,36 +187,117 @@ Free:
         pop     ebx
         ret     4
 
+;-----------------------------------------------------------------------------
 
-struct FILED
-        opcode  rd 1
-        offset  rd 2
-        size    rd 1
-        buffer  rd 1
-                rb 1
-        path    rd 1
-        end_path rd 1
-ends
-
-;NTSTATUS stdcall FileInfo(FILED* file)
+;FS_STATUS stdcall FileInfo(char* path, void* buffer)
 FileInfo:
+        mov     ecx, [esp + 4]
+        mov     edx, [esp + 8]
         push    ebx
-        mov     ebx, [esp + 4*1 + 4]
-        mov     dword[ebx], 5 ; file info
-        mov     dword[ebx + FILED.offset + 4], 0 ; zero flag
+        sub     esp, sizeof.FILED
+        mov     dword[esp + FILED.opcode], 5 ; file info
+        mov     dword[esp + FILED.offset + 4], 0 ; zero flag
+        mov     dword[esp + FILED.buffer], edx
+        mov     byte[esp + FILED.path - 1], 0
+        mov     dword[esp + FILED.path], ecx
+        mov     ebx, esp
         mcall   70
+        add     esp, sizeof.FILED
         pop     ebx
-        ret     4
-;NTSATTUS stdcall FileRead(FILED* file)
+        ret     8
+
+; void stdcall FileInitFILED(void* buffer, char* path)
+FileInitFILED:
+        push    ecx edi
+        mov     edi, [esp + 4*2 + 4]
+        mov     ecx, sizeof.FILED
+        xor     eax, eax
+        rep stosb
+        mov     eax, [esp + 4*2 + 4]
+        mov     ecx, [esp + 4*2 + 8]
+        mov     [eax + FILED.path], ecx
+        dec     ecx
+@@:
+        inc     ecx
+        cmp     byte[ecx], 0
+        jne     @b
+
+        mov     [eax + FILED.end_path], ecx
+        pop     edi ecx
+        ret     8
+
+;uint32_t stdcall FileRead(FILED* file, void* buffer, uint32_t size)
 FileRead:
+
+        mov     eax, [esp + 4]
+        mov     ecx, [esp + 8]
+        mov     edx, [esp + 12]
+
         push    ebx
-        mov     ebx, [esp + 4*1 + 4]
-        mov     dword[ebx], 0 ; read file
+        mov     [eax + FILED.opcode], 0
+        mov     [eax + FILED.size], edx
+        mov     [eax + FILED.buffer], ecx
+
+        mov     ebx, eax
         mcall   70
+
+        test    eax, eax
+        jz      @f
+        cmp     eax, 6 ; EOF
+        je      @f
+        xor     ebx, ebx
+@@:
+        mov     eax, ebx
+
         pop     ebx
-        ret     4
+        mov     ecx, [esp + 4]
+        add     [ecx + FILED.offset], eax
+        adc     [ecx + FILED.offset], 0
+
+        ret     12
 
 
+;void stdcall FileSetOffset(FILED* file, uint64_t offset)
+FileSetOffset:
+        push    ecx
+        mov     eax, [esp + 4]
+        mov     ecx, [esp + 8]
+        mov     [eax + FILED.offset], ecx
+        mov     ecx, [esp + 12]
+        mov     [eax + FILED.offset + 4], ecx
+        pop     ecx
+        ret     12
+
+;uint32_t stdcall FileReadOfName(char* path, void* buffer, uint32_t size)
+FileReadOfName:
+        mov     ecx, [esp + 4]
+        mov     edx, [esp + 8]
+        mov     eax, [esp + 12]
+        push    ebx
+        sub     esp, sizeof.FILED
+        mov     dword[esp + FILED.opcode], 0
+        mov     dword[esp + FILED.offset], 0
+        mov     dword[esp + FILED.offset + 4], 0
+        mov     dword[esp + FILED.size], eax
+        mov     dword[esp + FILED.buffer], edx
+        mov     byte[esp + FILED.path - 1], 0
+        mov     dword[esp + FILED.path], ecx
+        mov     ebx, esp
+        mcall   70
+        test    eax, eax
+        jz      @f
+        cmp     eax, 6 ; EOF
+        je      @f
+        xor     ebx, ebx
+@@:
+        mov     eax, ebx
+        add     esp, sizeof.FILED
+        pop     ebx
+        ret     12
+
+
+
+;-----------------------------------------------------------------------------
 
 
 ;RESPD* stdcall create_resp(CONNECT_DATA* session, uint32_t flags)
@@ -355,7 +436,6 @@ send_resp:
 
 
 .chunked:
-        ; TODO
         mov     eax, -1
         mov     ecx, [esp + 4*3 + 8] ; ptr
         test    ecx, ecx
@@ -388,8 +468,8 @@ send_resp:
         call    netfunc_send
         add     esp, 2+8
 
-        cmp     eax, -1
-        jz      .exit
+        ;cmp     eax, -1
+        ;jz      .exit
 
         ; send content
         mov     ecx, [esp + 4*3 + 8] ; ptr
@@ -401,8 +481,8 @@ send_resp:
         push    dword[eax + CONNECT_DATA.socket]
         call    netfunc_send
 
-        cmp     eax, -1
-        jz      .exit
+        ;cmp     eax, -1
+        ;jz      .exit
 
         ; send db 13, 10
         push    word 0x0a0d
@@ -415,6 +495,7 @@ send_resp:
         push    dword[eax + CONNECT_DATA.socket]
         call    netfunc_send
 
+        add     esp, 2
         pop     ebp edi esi
         ret     12
 
@@ -712,7 +793,7 @@ finish_send_resp:
 .exit:
         ret     4
 
-
+;-----------------------------------------------------------------------------
 ;void close_server()
 ; TODO: added free HTTPD_MODULE structures
 close_server:

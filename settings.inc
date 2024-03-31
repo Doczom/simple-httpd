@@ -40,6 +40,7 @@ load_settings:
 
         mov     dword[srv_stop], 0
         mov     dword[srv_shutdown], 0
+        mov     dword[srv_tls_enable], 0
 
         sub     esp, 16
         mov     esi, esp
@@ -71,7 +72,17 @@ load_settings:
 
         mov     word[srv_sockaddr], AF_INET4
         
-        invoke  ini.get_int, ebp, ini_section_main, ini_key_port, 80 ; standart port
+        invoke  ini.enum_keys, ebp, ini_section_tls, .add_module.exit
+        test    eax, eax
+        jnz     @f
+        mov     dword[srv_tls_enable], 1
+@@:
+        mov     eax, 80
+        cmp     dword[srv_tls_enable], 0
+        je      @f
+        mov     eax, 443
+@@:
+        invoke  ini.get_int, ebp, ini_section_main, ini_key_port, eax ; standart port
         xchg    al, ah
         mov     [srv_sockaddr.port], ax
         
@@ -217,32 +228,28 @@ load_mime_file:
         pop     eax
 
         mov     esi, eax
-        lea     ecx, [eax + sizeof.FILED + 40]
-        mov     [esi + FILED.path], ecx
-        invoke  ini.get_str, ebp, ini_section_main, ini_key_mime_file, ecx, 1024, 0 
+        invoke  ini.get_str, ebp, ini_section_main, ini_key_mime_file, esi, 1024, 0
         test    eax, eax
         jnz     .no_file
 
-        lea     ecx, [esi + sizeof.FILED]
-        mov     [esi + FILED.buffer], ecx
-        stdcall FileInfo, esi
+        sub     esp, 40
+        stdcall FileInfo, esi, esp
         test    eax, eax
         jnz     .no_file
 
-        mov     ecx, [esi + sizeof.FILED + 32]
+        mov     ecx, [esp + 32]
         stdcall Alloc, ecx
         test    eax, eax 
         jz      .no_file
 
-        mov     ecx, [esi + sizeof.FILED + 32]
+        mov     ecx, [esp + 32]
         mov     edi, eax
-        mov     [esi + FILED.buffer], eax
-        mov     [esi + FILED.size], ecx
-        mov     [esi + FILED.offset], 0
-        mov     dword[esi + FILED.offset + 4], 0
-        stdcall FileRead, esi
+
+        stdcall FileReadOfName, esi, edi, ecx
         test    eax, eax
-        jnz     .error_read
+        jz      .error_read
+
+        add     esp, 40
 
         mov     dword[GLOBAL_DATA.MIME_types_arr], edi
         mov     eax, edi
@@ -258,6 +265,7 @@ load_mime_file:
 .error_read:
         stdcall Free, edi
 .no_file:
+        add     esp, 40
         stdcall Free, esi
 .err:
         mov     dword[GLOBAL_DATA.MIME_types_arr], STD_MIME_TYPE_ARR

@@ -27,16 +27,26 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         end_buffer_request dd 0 ; для парсера 
         buffer_response dd 0 ; pointer to buffwr for resp message 
         http_method     dd 0 ; указатель на строку
-        http_verion     dd 0 ; указатель на строку
+        http_verion     dd 0 ; pointer to the asciiz string with protocol version
         num_headers     dd 0 ; number items in REQUEST_DATA
-        http_headers    dd 0 ; указатель на массив REQUEST_DATA
+        http_headers    dd 0 ; pointer to array REQUEST_DATA of HTTP headers
         uri_scheme      dd 0 ; указатель на схему
         uri_authority   dd 0 ; pointer to struct ?
         uri_path        dd 0 ; указатель на декодированный путь к ресурсу(без параметров)
         num_uri_args    dd 0 ;
-        uri_arg         dd 0 ; pointer to array REQUEST_DATA аргументов uri строк
+        uri_arg         dd 0 ; pointer to the REQUEST_DATA array of string uri arguments
         uri_fragment    dd 0 ; указатель на строку
         message_body    dd 0 ; указатель на тело http запроса
+ends
+
+struct FILED
+        opcode          rd 1
+        offset          rd 2
+        size            rd 1
+        buffer          rd 1
+                        rb 1
+        path            rd 1
+        end_path        rd 1
 ends
 
 
@@ -50,11 +60,21 @@ struct IMPORT_DATA
         netfunc_listen  rd 1
         netfunc_recv    rd 1
         netfunc_send    rd 1
-        FileInfo        rd 1
-        FileRead        rd 1
         Alloc           rd 1
         Free            rd 1
         parse_http_query rd 1 ; not standart calling, not using this function
+        ;---------------------------------------------------------------------
+        FileInitFILED   rd 1
+        ;void stdcall FileInitFILED(FILED* buffer, char* path);
+        FileInfo        rd 1
+        ;FS_STATUS stdcall FileInfo(char* path, void* buffer);
+        FileRead        rd 1
+        ;uint32_t stdcall FileRead(FILED* file, void* buffer, uint32_t size);
+        FileSetOffset   rd 1
+        ;void stdcall FileSetOffset(FILED* file, uint64_t offset);
+        FileReadOfName  rd 1
+        ;uint32_t stdcall FileReadOfName(char* path, void* buffer, uint32_t size);
+        ;---------------------------------------------------------------------
         send_resp       rd 1
         ; send_resp(RESPD* ptr, char* content, uint32_t length);
         create_resp     rd 1
@@ -72,17 +92,19 @@ struct IMPORT_DATA
         set_http_ver    rd 1
         ; void set_http_ver(RESPD* ptr, char* version, uint32_t length);
         ;   example: 'RTSP/1.1'
-        find_uri_arg    rd 1
-        ;char* find_uri_arg(CONNECT_DATA* session, char* key);
-        find_header     rd 1
-        ;char* find_header(CONNECT_DATA* session, char* key);
-        close_server    rd 1
-        ;void close_server();
         begin_send_resp rd 1
         ;uint32_t begin_send_resp(RESPD* ptr, uint64_t content_length);
         finish_send_resp rd 1
         ;uint32_t finish_send_resp(RESPD* ptr);
+        ;---------------------------------------------------------------------
+        find_uri_arg    rd 1
+        ;char* find_uri_arg(CONNECT_DATA* session, char* key);
+        find_header     rd 1
+        ;char* find_header(CONNECT_DATA* session, char* key);
+        get_mime_type   rd 1
+        ;char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
+        close_server    rd 1
+        ;void close_server();
 
-        base_response   rd 1
         GLOBAL_DATA     rd 1
 ends

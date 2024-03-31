@@ -52,22 +52,6 @@
 ;serv_header:
 ;        .Accept_Ranges  db 'Accept-Ranges: bytes',13,10
 
-;http_method:
-;        .get:   db 'GET '
-;        .head:  db 'HEAD'
-;        .post:  db 'POST'
-;        .put:   db 'PUT '
-;        .patch  db 'PATCH'
-
-;error_404:
-;        db '<html>'
-;        db '<title>Error 404</title>'
-;        db '<center>'
-;        db             'Error 404 <br>'
-;        db 'The server could not find the requested page.<br><br>'
-;        db '</center>'
-;        db '</html>',0
-
 ;http_err_response:
 ;                db 'HTTP/1.1 '
 ;.code = $ - http_err_response
@@ -97,7 +81,9 @@ default_http_cont_encod:
 .length = $ - default_http_cont_encod
 
 default_http_cont_type:
-                db 'Content-type: text/html', 13, 10
+                db 'Content-type: '
+.value =  $ - default_http_cont_type
+                db 'text/html                                                       ', 13, 10;
 .length = $ - default_http_cont_type
 
 default_http_cache_ctl:
@@ -152,35 +138,6 @@ http_response_options:
                 db 13, 10
 .size = $ - http_response_options
 
-
-
-
-base_response:
-response: 
-                db 'HTTP/1.1 '
-.code = $ - response        
-                db '000 ',13, 10
-                db 'Server: simple-httpd/0.3.0', 13, 10
-                db 'Cache-Control: no-cache', 13, 10
-                db 'Content-Encoding: '
-.content_encod = $ - response 
-                db 'identity', 13, 10
-;                db 'Date: '
-;.date:          db 'Sun, 30 Oct 2022 09:29:13 GMT',13, 10
-                db 'Content-length: '
-.content_len = $ - response   
-                db '0000000000000000000000', 13, 10
-                db 'Content-type: '
-.content_type = $ - response  
-                db 'text/html                                                       ', 13, 10;
-                  ;'text/html; charset=utf-8'
-                db 'Connection: '
-.connection = $ - response 
-                db 'close     ', 13, 10
-                ;  'keep-alive'
-.end_headers = $ - response ; for adding new headers
-                db 13, 10
-.body = $ - response          ; offset for add http body in simple response 
 
 ; min HTTP request size
 ; "GET / HTTP/1.1" - 18 byte

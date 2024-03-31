@@ -33,7 +33,6 @@ unit_init:
         xor     eax, eax
         push    esi edi
         mov     esi, [esp + 4*2 + 4]
-        mov     [import_httpd], esi
 
         cmp     dword[esi + IMPORT_DATA.version], API_VERSION
         jne     .exit
@@ -68,7 +67,7 @@ server_entry:
         cmp     dword[edx], 'new'
         je      .no_del
 
-        cmp     dword[edx], 'del'
+        ;cmp     dword[edx], 'del'
 
         mov     dword[text_message], '    '
         mov     dword[text_message + 4], '    '
@@ -117,7 +116,6 @@ server_entry:
         rep movsd
         pop     edi esi
 
-        mov     [esi + CONNECT_DATA.buffer_response], eax
         ; copy message
         mov     ecx, [text_message]
         mov     [eax + sceleton_resp.message], ecx
@@ -150,12 +148,24 @@ server_entry:
         ; set httpcode
         mov     dword[edi + sceleton_resp.code], '200 '
         ; send http message
+        push    dword FLAG_RAW_STREAM
+        push    esi
+        call    [IMPORT.create_resp]
 
-        push    dword 0 ; flags
+        test    eax, eax
+        jz      .exit
+
+        mov     esi, eax
         push    sceleton_resp.size
         push    edi
-        push    dword[esi + CONNECT_DATA.socket]
-        call    [IMPORT.netfunc_send]
+        push    eax
+        call    [IMPORT.send_resp]
+
+        push    esi
+        call    [IMPORT.destruct_resp]
+
+        push    edi
+        call    [IMPORT.Free]
 
         board_input 'send'
 .exit:
@@ -172,8 +182,6 @@ section '.data' data readable writable align 16
 _10: dd 10
 
 count_call dd 0
-
-import_httpd: dd 0
 
 sceleton_resp:  
                 db 'HTTP/1.0 '

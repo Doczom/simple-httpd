@@ -5,7 +5,7 @@ examples=$(wildcard example/*.asm)
 examples_obj=$(patsubst %.asm,%.obj,$(examples))
  
 
-all: build-main build-mime $(examples_obj)
+all: build-main build-mime $(examples_obj) copy_docs
 	
 
 build-main:
@@ -17,3 +17,5 @@ build-mime:
 example/%.obj: example/%.asm
 	fasm $< $(OUTPUT_MODULES)/$(notdir $(basename $@)).obj
 
+copy_docs:
+	cp -R doc/* $(OUTPUT_DIR)/server_data/docs

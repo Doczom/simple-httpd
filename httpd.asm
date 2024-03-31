@@ -4,7 +4,7 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                        Version 0.2.2, 10 March 2024                         ;
+;                        Version 0.2.3, 31 March 2024                         ;
 ;                                                                             ;
 ;*****************************************************************************;
 
@@ -41,6 +41,7 @@ START:
         jz      @f
 
         mov     ecx, PATH
+        ; TODO: add check ""
 
 @@:
         ; get settings
@@ -96,7 +97,7 @@ START:
 .sock_err:
         mcall   -1
 
-
+;-----------------------------------------------------------------------------
 
 thread_connect:
         sub     esp, sizeof.CONNECT_DATA
@@ -256,6 +257,11 @@ ini_key_work_dir        db 'work_dir',0
 ini_key_modules_dir     db 'modules_dir',0
 ini_key_mime_file       db 'mime_file',0
 
+ini_key_mbedtls_obj     db 'mbedtls',0
+ini_key_ca_cer          db 'ca_cer',0
+ini_key_srv_crt         db 'srv_crt',0
+ini_key_srv_key         db 'srv_key',0
+
 httpd_module_init       db 'httpd_init',0
 httpd_module_serv       db 'httpd_serv',0
 httpd_module_close      db 'httpd_close',0
@@ -279,11 +285,15 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      netfunc_listen
         dd      netfunc_recv
         dd      netfunc_send
-        dd      FileInfo
-        dd      FileRead
         dd      Alloc
         dd      Free
         dd      parse_http_query ; no stdcall
+
+        dd      FileInitFILED
+        dd      FileInfo
+        dd      FileRead
+        dd      FileSetOffset
+        dd      FileReadOfName
 
         dd      send_resp
         dd      create_resp
@@ -292,13 +302,14 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      add_http_header
         dd      del_http_header
         dd      set_http_ver
-        dd      find_uri_arg
-        dd      find_header
-        dd      close_server
         dd      begin_send_resp
         dd      finish_send_resp
 
-        dd      base_response
+        dd      find_uri_arg
+        dd      find_header
+        dd      Get_MIME_Type
+        dd      close_server
+
         dd      GLOBAL_DATA
 .size = $ - EXPORT_DATA ; (count func)*4 + size(api ver) + 4
         dd      0
@@ -307,6 +318,8 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
 ;UDATA
 srv_stop:       rd 1 ; set 1 for skip new connections
 srv_shutdown:   rd 1 ; set 1 for ending working server
+srv_tls_enable  rd 1 ; set 1 for enable TLS mode working
+
 srv_backlog:    rd 1 ; maximum number of simultaneous open connections
 
 srv_socket:     rd 1
