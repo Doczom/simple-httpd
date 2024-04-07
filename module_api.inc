@@ -31,7 +31,7 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         num_headers     dd 0 ; number items in REQUEST_DATA
         http_headers    dd 0 ; pointer to array REQUEST_DATA of HTTP headers
         uri_scheme      dd 0 ; указатель на схему
-        uri_authority   dd 0 ; pointer to struct ?
+        uri_authority   dd 0 ; pointer to string(%XX not converted)
         uri_path        dd 0 ; указатель на декодированный путь к ресурсу(без параметров)
         num_uri_args    dd 0 ;
         uri_arg         dd 0 ; pointer to the REQUEST_DATA array of string uri arguments
@@ -44,7 +44,7 @@ struct FILED
         offset          rd 2
         size            rd 1
         buffer          rd 1
-                        rb 1
+        name_encode     rd 1
         path            rd 1
         end_path        rd 1
 ends

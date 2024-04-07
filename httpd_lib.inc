@@ -66,49 +66,58 @@
 ;                db 13, 10
 ;.size = $ - http_err_response
 
+align   4
 default_http_version:
                 db 'HTTP/1.1 '
 .length = $ - default_http_version
 
+align   4
 default_http_connection:
                 db 'Connection: '
 .value =  $ - default_http_connection
                 db 'close     ', 13, 10 ; or keep-alive
 .length = $ - default_http_connection
 
+align   4
 default_http_cont_encod:
                 db 'Content-Encoding: identity', 13, 10
 .length = $ - default_http_cont_encod
 
+align   4
 default_http_cont_type:
                 db 'Content-type: '
 .value =  $ - default_http_cont_type
                 db 'text/html                                                       ', 13, 10;
 .length = $ - default_http_cont_type
 
+align   4
 default_http_cache_ctl:
                 db 'Cache-Control: no-cache', 13, 10
 .length = $ - default_http_cache_ctl
 
+align   4
 default_http_cont_len:
                 db 'Content-length: '
                 db '0000000000000000000000', 13, 10
 .length = $ - default_http_cont_len
 
+align   4
 default_http_header_server:
                 db 'Server: simple-httpd/0.3.0', 13, 10
 .length = $ - default_http_header_server
 
+align   4
 http_header_transfer_chunked:
                 db 'Transfer-Encoding: chunked', 13, 10
 .length = $ - http_header_transfer_chunked
 
+;align   4
 ;default_http_date_header:
 ;                db 'Date: '
 ;.date:          db 'Sun, 30 Oct 2022 09:29:13 GMT',13, 10
 ;.length = $ - default_http_date_header
 
-
+align   4
 http_response_err_501:
                 db 'HTTP/1.1 '
                 db '501 ',13, 10
@@ -118,6 +127,7 @@ http_response_err_501:
                 db 13, 10
 .size = $ - http_response_err_501
 
+align   4
 http_response_err_404:
                 db 'HTTP/1.1 '
                 db '404 ',13, 10
@@ -129,6 +139,7 @@ http_response_err_404:
                 db 'The server could not find the requested page.'
 .size = $ - http_response_err_404
 
+align   4
 http_response_options:
                 db 'HTTP/1.1 '
                 db '204 ',13, 10
@@ -143,6 +154,7 @@ http_response_options:
 ; "GET / HTTP/1.1" - 18 byte
 min_http_size   = 18
 
+align   4
 MIME_FILE_FORMAT:
 .html:          db 5,'.html', 'text/html',0
 .css:           db 4,'.css',  'text/css ',0
@@ -157,6 +169,7 @@ MIME_FILE_FORMAT:
 .other:         dd 0
                 db 'application/octet-stream',0 ; for unknow file - all file :)
 
+align   4
 STD_MIME_TYPE_ARR:
         dd      MIME_FILE_FORMAT.html, \
                 MIME_FILE_FORMAT.css, \
@@ -173,5 +186,20 @@ _DIV_10_:       dd 10
 _DIV_100_:      dd 100
 _DIV_1000_:     dd 1000
 
+align   4
 hex_chars:
         db '0123456789ABCDEF'
+
+align   16
+hex_table db 256 dup -1
+repeat 10
+    store byte %-1 at hex_table + '0' + %-1
+end repeat
+repeat 6
+    store byte 0x0A+%-1 at hex_table + 'A' + %-1
+end repeat
+repeat 6
+    store byte 0x0A+%-1 at hex_table + 'a' + %-1
+end repeat
+
+

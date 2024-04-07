@@ -4,7 +4,7 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                        Version 0.2.3, 31 March 2024                         ;
+;                        Version 0.2.3, 07 April 2024                         ;
 ;                                                                             ;
 ;*****************************************************************************;
 
@@ -205,11 +205,11 @@ thread_connect:
         call    file_server.err_http_501
 .end_work:
         add     esp, 2048
-        ; free OUT buffer
-        cmp     dword[esp + CONNECT_DATA.buffer_response], 0
-        jz      .err_recv_sock
-        push    dword[esp + CONNECT_DATA.buffer_response]
-        call    Free
+;        ; free OUT buffer
+;        cmp     dword[esp + CONNECT_DATA.buffer_response], 0
+;        jz      .err_recv_sock
+;        push    dword[esp + CONNECT_DATA.buffer_response]
+;        call    Free
 .err_recv_sock:
         ; free IN buffer
         cmp     dword[esp + CONNECT_DATA.buffer_request], 0

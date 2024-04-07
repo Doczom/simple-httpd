@@ -198,10 +198,10 @@ FileInfo:
         mov     dword[esp + FILED.opcode], 5 ; file info
         mov     dword[esp + FILED.offset + 4], 0 ; zero flag
         mov     dword[esp + FILED.buffer], edx
-        mov     byte[esp + FILED.path - 1], 0
+        mov     dword[esp + FILED.name_encode], 3 ;UTF-8
         mov     dword[esp + FILED.path], ecx
         mov     ebx, esp
-        mcall   70
+        mcall   80
         add     esp, sizeof.FILED
         pop     ebx
         ret     8
@@ -210,12 +210,13 @@ FileInfo:
 FileInitFILED:
         push    ecx edi
         mov     edi, [esp + 4*2 + 4]
-        mov     ecx, sizeof.FILED
+        mov     ecx, sizeof.FILED/4
         xor     eax, eax
-        rep stosb
+        rep stosd
         mov     eax, [esp + 4*2 + 4]
         mov     ecx, [esp + 4*2 + 8]
         mov     [eax + FILED.path], ecx
+        mov     dword[eax + FILED.name_encode], 3 ;UTF-8
         dec     ecx
 @@:
         inc     ecx
@@ -239,7 +240,7 @@ FileRead:
         mov     [eax + FILED.buffer], ecx
 
         mov     ebx, eax
-        mcall   70
+        mcall   80
 
         test    eax, eax
         jz      @f
@@ -280,10 +281,10 @@ FileReadOfName:
         mov     dword[esp + FILED.offset + 4], 0
         mov     dword[esp + FILED.size], eax
         mov     dword[esp + FILED.buffer], edx
-        mov     byte[esp + FILED.path - 1], 0
+        mov     dword[esp + FILED.name_encode], 3 ;UTF-8
         mov     dword[esp + FILED.path], ecx
         mov     ebx, esp
-        mcall   70
+        mcall   80
         test    eax, eax
         jz      @f
         cmp     eax, 6 ; EOF

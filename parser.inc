@@ -24,9 +24,6 @@ parse_url:
 ;         \_/   \______________/\_________/ \_________/ \__/
 ;          |           |            |            |        |
 ;       scheme     authority       path        query   fragment
-;          |   _____________________|__
-;         / \ /                        \
-;         urn:example:animal:ferret:nose
  
         cmp     byte[ecx], '/' ; check abs-path
         je      .get_path
@@ -53,7 +50,7 @@ parse_url:
         ja      .error_exit
 
         inc     ecx
-        ;cmp     byte[ecx - 1], ' ' ;check end, не нужно, так как в http всегда / абс путь 
+        ;cmp     byte[ecx - 1], ' ' ;check end, in http always is used abs-path
 
         cmp     byte[ecx - 1], '/'
         jne     @b
@@ -61,20 +58,48 @@ parse_url:
 .get_path:
         ;ecx = path-absolute 
         mov     [esi + CONNECT_DATA.uri_path], ecx
-@@:        
+        mov     edi, ecx
+        mov     al, byte[ecx]
+.get_path.new_char:
+        stosb
         inc     ecx
 
         cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
         ja      .error_exit
 
-        cmp     byte[ecx], '?'
+        mov     al, byte[ecx]
+        mov     byte[edi], 0
+
+        cmp     al, '?'
         je      .get_query
         
-        cmp     byte[ecx], '#'
+        cmp     al, '#'
         je      .get_fragment
 
-        cmp     byte[ecx], ' ' ; check end path
-        jne     @b
+        cmp     al, ' ' ; check end path
+        je      .get_path.end
+
+        cmp     al, '%' ; check end path
+        jne     .get_path.new_char
+
+        ; %00-%FF
+        inc     ecx
+        movzx   eax, byte[ecx]
+        mov     al, byte[hex_table + eax]
+        cmp     al, -1
+        je      .error_exit
+        mov     edx, eax
+
+        inc     ecx
+        movzx   eax, byte[ecx]
+        mov     al, byte[hex_table + eax]
+        cmp     al, -1
+        je      .error_exit
+        shl     edx, 4
+        add     eax, edx
+
+        jmp     .get_path.new_char
+.get_path.end:
         mov     byte[ecx], 0
         inc     ecx
         jmp     .exit
@@ -104,10 +129,10 @@ parse_url:
         cmp     byte[ecx], '='
         je      .get_args
 
-        cmp     byte[ecx], '#'  ; ЭТО БРЕД ПОЛНЫЙ, НО ВДРУГ
+        cmp     byte[ecx], '#'  ; THIS IS COMPLETE NONSENSE, BUT SUDDENLY
         je      .get_fragment
 
-        cmp     byte[ecx], ' '  ;  http://cjkhr.bvgbfdkvdf.dmejfgehf/?1pr1 
+        cmp     byte[ecx], ' '  ; http://cjkhr.bvgbfdkvdf.dmejfgehf/?1pr1
         jne     @b
 .exit_2:
         mov     byte[ecx], 0
