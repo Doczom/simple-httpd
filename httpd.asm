@@ -4,7 +4,7 @@
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                        Version 0.2.3, 07 April 2024                         ;
+;                         Version 0.2.5, 13 June 2024                         ;
 ;                                                                             ;
 ;*****************************************************************************;
 
@@ -12,7 +12,9 @@
   use32
   org    0
   db     'MENUET01'
-  dd     1, START, I_END, MEM, STACKTOP, PATH, 0
+  dd     1, START, I_END, MEM, STACKTOP
+M01header.params:
+  dd     PATH, 0
 include "macros.inc"
 purge mov,add,sub
 
@@ -20,6 +22,7 @@ include 'module_api.inc'
 
 include "proc32.inc"
 include "dll.inc"
+include "KOSfuncs.inc"
 ;include 'D:\kos\programs\network.inc'
 ;KOS_APP_START
 
@@ -28,29 +31,43 @@ include 'settings.inc'
 
 ;CODE
 START:
-        mcall   68, 11  ; init heap
-        mcall   40, EVM_STACK ;set event bitmap
+        mcall   SF_SYS_MISC, SSF_HEAP_INIT  ; init heap
+        mcall   SF_SET_EVENTS_MASK, EVM_STACK ;set event bitmap
 
         ; init library
         stdcall dll.Load, @IMPORT
         test    eax, eax
-        jnz     .err_settings  
+        jnz     .err_settings
 
         mov     ecx, default_ini_path
-        cmp     byte[PATH],0
-        jz      @f
+        mov     eax, [M01header.params]
+        cmp     byte[eax],0
+        jz      .load_settings
 
-        mov     ecx, PATH
-        ; TODO: add check ""
-
+        mov     edx, ' '
+        mov     ecx, eax
+        cmp     byte[eax], '"'
+        jne     @f
+        mov     dl, '"'
+        inc     ecx
 @@:
+        mov     esi, ecx
+@@:
+        lodsb
+        test    al, al
+        jz      @f
+        cmp     al, dl
+        jne     @b
+@@:
+        mov     byte[esi - 1], 0
+.load_settings:
         ; get settings
         call    load_settings ; ecx -> string to config file
         test    eax, eax
         jnz     .err_settings
 
         ;init server socket
-        push    dword SO_NONBLOCK ;IPPROTO_TCP 
+        push    dword SO_NONBLOCK ;IPPROTO_TCP
         push    dword SOCK_STREAM
         push    dword AF_INET4
         call    netfunc_socket; AF_INET4, SOCK_STREAM, SO_NONBLOCK ; we dont want to block on accept
@@ -95,13 +112,13 @@ START:
 
 .err_settings:
 .sock_err:
-        mcall   -1
+        mcall   SF_TERMINATE_PROCESS
 
 ;-----------------------------------------------------------------------------
 
 thread_connect:
         sub     esp, sizeof.CONNECT_DATA
-        mcall   40, EVM_STACK ; set event bitmap - network event 
+        mcall   SF_SET_EVENTS_MASK, EVM_STACK ; set event - network event
 
         ; ожидание подключения Accept, sockaddr находится на вершине стека нового потока
         ;lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
@@ -115,7 +132,7 @@ thread_connect:
 
         cmp     eax, -1
         jz      .err_accept
-        
+
         mov     [esp + CONNECT_DATA.socket], eax
         mov     ebp, esp
 
@@ -142,7 +159,7 @@ thread_connect:
         add     [esp], eax
         push    dword[esi + CONNECT_DATA.socket]
         call    netfunc_recv
-        
+
         cmp     eax, -1
         jz      .err_recv_sock
 
@@ -152,42 +169,85 @@ thread_connect:
  ;       cmp     [esi + CONNECT_DATA.request_size], 0x8000 ; check end buffer
  ;       jb      @b
 @@:
-        ; после получения всего запроса(более или менее всего) выделяем озу для 
+        ; после получения всего запроса(более или менее всего) выделяем озу для
         ; ассоциативного массива заголовков и аргументов запроса
         ; 8*50 + 8*100
         ;  esp        .. esp + 1024 -> for http headers
         ;  esp + 1024 .. esp + 2048 -> for URI args
-        sub     esp, 2048 
+        sub     esp, 2048
 
         ; parse http message
-        mov     ecx, [esi + CONNECT_DATA.buffer_request] 
-        call    parse_http_query ; ecx - buffer 
+        mov     ecx, [esi + CONNECT_DATA.buffer_request]
+        call    parse_http_query ; ecx - buffer
         test    eax, eax
         jz      .err_parse
         ; find unit  for uri path
         cmp     dword[GLOBAL_DATA.modules], 0
         jz      .no_modules
-        
+
         mov     eax, [GLOBAL_DATA.modules]
 .next_unit:
         push    esi edi
         mov     esi, [esi + CONNECT_DATA.uri_path]
         lea     edi, [eax + HTTPD_MODULE.uri_path]
+        ; check module for all uri path
 @@:
         cmpsb
         jne     @f
 
         cmp     byte[edi - 1], 0
         jne     @b
+.found_module:
         ; found module
         pop     edi esi
-        
+
         push    dword[eax + HTTPD_MODULE.pdata] ; context of module
         push    esi                           ; coutext of request
         call    dword[eax + HTTPD_MODULE.httpd_serv] ; call unit function
 
         jmp     .end_work
 @@:
+.found_special_char:
+        cmp     byte[edi - 1], '*'
+        jne     .no_special_char
+
+        ;je      .found_module
+        ; check next char in uri of modules
+        cmp     byte[edi], 0
+        je      .found_module
+        ; uri path "*name" or "*name*"
+        dec     esi
+.special_char_loop:
+        cmp     byte[esi], 0
+        je      .no_special_char
+
+        ;inc     esi
+
+        xor     ecx, ecx
+@@:
+        inc     ecx
+        mov     dl, byte[edi + ecx - 1]
+
+        cmp     dl, '*'
+        je      @f
+
+        cmp     byte[esi + ecx - 1], dl
+        lea     esi, [esi + 1]
+        jne     .special_char_loop
+        dec     esi
+
+        test    dl, dl
+        jnz     @b
+
+        jmp     .found_module
+@@:
+        ; found substr
+        add     esi, ecx
+        add     edi, ecx
+
+        jmp     .found_special_char
+
+.no_special_char:
         pop     edi esi
 
         mov     eax, [eax] ; HTTPD_MODULE.next
@@ -196,20 +256,15 @@ thread_connect:
 
 .no_modules:
         ; if not found modules, call file_server
-        call    file_server ; esi - struct 
+        call    file_server ; esi - struct
         ; end work thread
         jmp     .end_work
-        
+
 
 .err_parse:
         call    file_server.err_http_501
 .end_work:
         add     esp, 2048
-;        ; free OUT buffer
-;        cmp     dword[esp + CONNECT_DATA.buffer_response], 0
-;        jz      .err_recv_sock
-;        push    dword[esp + CONNECT_DATA.buffer_response]
-;        call    Free
 .err_recv_sock:
         ; free IN buffer
         cmp     dword[esp + CONNECT_DATA.buffer_request], 0
@@ -222,7 +277,7 @@ thread_connect:
 .err_accept:
         lea     ecx,[esp + sizeof.CONNECT_DATA - 0x4000] ; get pointer to alloc memory
         mcall   68, 13 ; free
-        mcall   -1     ; close thread
+        mcall   SF_TERMINATE_PROCESS     ; close thread
 
 include 'parser.inc'
 
@@ -307,6 +362,7 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
 
         dd      find_uri_arg
         dd      find_header
+        dd      read_http_body
         dd      Get_MIME_Type
         dd      close_server
 
@@ -333,7 +389,7 @@ srv_sockaddr:
 
 GLOBAL_DATA:
         .modules        rd 1 ; pointer to a doubly connected non-cyclic list (null terminator)
-                             ; next, prev, ptr of httpd_serv(), uri path 
+                             ; next, prev, ptr of httpd_serv(), uri path
         .work_dir              rb 1024 ; max size path to work directory
         .work_dir.size         rd 1 ; length string
         .modules_dir           rb 1024

@@ -46,12 +46,12 @@ unit_init:
         mov     eax, 1 ;no zero return - unit init successful
 .exit:
         pop     edi esi
-        ret     8
+        ret     12
 
 
 server_entry:
-        push    esi edi
-        mov     esi, [esp + 4*2 + 4]
+        push    esi edi ebp
+        mov     esi, [esp + 4*3 + 4]
         ; work
         board_input 'first'
 
@@ -71,7 +71,7 @@ server_entry:
         mov     ecx, [eax + 4]
         cmp     dword[ecx], 'bpo'
         jne     .no_bpo
-
+.bpo:
         board_input 'bpo'
         invoke  IMPORT.Alloc, sceleton_resp.size
         test    eax, eax
@@ -94,11 +94,13 @@ server_entry:
         rep movsb
         pop     esi
 
+        mov     ebp, cookie_bpo
+
         jmp     .send_data
 .no_bpo:
         cmp     dword[ecx], 'btp'
         jne     .err_404
-
+.btp:
         board_input 'btp'
         invoke  IMPORT.Alloc, sceleton_resp.size
         test    eax, eax
@@ -121,9 +123,24 @@ server_entry:
         rep movsb
         pop     esi
 
+        mov     ebp, cookie_btp
+
         jmp     .send_data
 .no_args:
         board_input 'no_arg'
+        ; check cookie
+        invoke  IMPORT.find_header, esi, key_cookie
+        test    eax, eax
+        jz      .no_args.send
+
+        cmp     dword[eax], 'gr=b'
+        jne     .no_args.send
+
+        cmp     word[eax + 4], 'tp'
+        je      .btp
+        cmp     word[eax + 4], 'po'
+        je      .bpo
+.no_args.send:
         invoke  IMPORT.create_resp, esi, 0
         test    eax, eax
         jz      .exit
@@ -132,7 +149,7 @@ server_entry:
         invoke  IMPORT.send_resp, eax, sceleton_resp, sceleton_resp.size
         invoke  IMPORT.destruct_resp ; arg in stack
 .exit:
-        pop     edi esi
+        pop     ebp edi esi
         ret     8
 
 .send_data: ; eax - ptr to buffer
@@ -144,6 +161,10 @@ server_entry:
 
         board_input 'send_data'
         push    eax
+
+        invoke  IMPORT.add_http_header, eax, ebp, cookie_length
+
+        mov     eax, [esp]
         invoke  IMPORT.send_resp, eax, edi, sceleton_resp.size
         invoke  IMPORT.destruct_resp ; arg in stack
 
@@ -197,6 +218,12 @@ btp_data:
 btp_name:
         db      'Технологи'
 .size = $ - btp_name
+
+key_cookie:     db 'Cookie', 0
+
+cookie_bpo:     db 'Set-Cookie: gr=bpo'
+cookie_length = $ - cookie_bpo
+cookie_btp:     db 'Set-Cookie: gr=btp'
 
 @EXPORT:
 export  \

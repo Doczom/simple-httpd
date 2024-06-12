@@ -110,7 +110,8 @@ ECONNABORTED            = 53
 ; stdcall socket(uint32_t domain, type, proto)
 netfunc_socket:
         push    ebx esi
-        mcall   75, 0, [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
+        mcall   SF_NETWORK_SOCKET, SSF_OPEN,\
+                        [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
         ;mov     [fs:0], ebx ;errno
         pop     esi ebx
         ret     12
@@ -118,48 +119,53 @@ netfunc_socket:
 ;stdcall close(uint32_t sock_number);
 netfunc_close:
         push    ebx
-        mcall    75, 1, [esp + 4 + 4]
+        mcall    SF_NETWORK_SOCKET, SSF_CLOSE, [esp + 4 + 4]
         pop     ebx
         ret     4
 
 ;stdcall bind(uint32_t sock_num, sockaddr* _sockaddr_struct, uint32_t sockaddr_size)
 netfunc_bind:
         push    esi ebx
-        mcall   75, 2, [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
+        mcall   SF_NETWORK_SOCKET, SSF_BIND,\
+                        [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
         pop     ebx esi
         ret     12
 
 ;stdcall listen(uint32_t socket, uint32_t backlog)
 netfunc_listen:
         push    ebx
-        mcall   75, 3, [esp + 4 + 4], [esp + 4 + 8]
+        mcall   SF_NETWORK_SOCKET, SSF_LISTEN,\
+                        [esp + 4 + 4], [esp + 4 + 8]
         pop     ebx
         ret     8
 ;stdcall accept(uint32_t socket, sockaddr* new_sockaddr_struct, uint32_t sockaddr_size)
 netfunc_accept:
         push    esi ebx
-        mcall   75, 5, [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
+        mcall   SF_NETWORK_SOCKET, SSF_ACCEPT,\
+                        [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
         pop     ebx esi
         ret     12
 ;stdcall send(uint32_t socket, void* buff, uint32_t len_buff, uint32_t flags)
 netfunc_send:
         push    esi edi ebx
-        mcall   75, 6, [esp + 3*4 + 4], [esp + 3*4 + 8],\
-                       [esp + 3*4 + 12], [esp + 3*4 + 16]
+        mcall   SF_NETWORK_SOCKET, SSF_SEND,\
+                        [esp + 3*4 + 4], [esp + 3*4 + 8],\
+                        [esp + 3*4 + 12], [esp + 3*4 + 16]
         pop     ebx edi esi
         ret     16
 ;stdcall recv(uint32_t socket, void* buff, uint32_t len_buff, uint32_t flags)
 netfunc_recv:
         push    esi edi ebx
-        mcall   75, 7, [esp + 3*4 + 4], [esp + 3*4 + 8],\
-                       [esp + 3*4 + 12], [esp + 3*4 + 16]
+        mcall   SF_NETWORK_SOCKET, SSF_RECEIVE,\
+                        [esp + 3*4 + 4], [esp + 3*4 + 8],\
+                        [esp + 3*4 + 12], [esp + 3*4 + 16]
         pop     ebx edi esi
         ret     16
 
 ; stdcall CreatThread(void* entry_thread);
 CreateThread:
         push    ebx edi
-        mcall   68, 12, 0x4000 ;alloc memory 16 kib for stack
+        mcall   SF_SYS_MISC, SSF_MEM_ALLOC, 0x4000 ;alloc memory 16 kib for stack
         test    eax, eax
         jz      .err
 
@@ -170,20 +176,20 @@ CreateThread:
         xor     eax, eax
         rep stosd
         add     edx, 0x4000
-        mcall   51, 1, [esp + 2*4 + 4] ;<- thread entry
+        mcall   SF_CREATE_THREAD, 1, [esp + 2*4 + 4] ;<- thread entry
 .err:
         pop     ebx edi
         ret     4
 ; stdcall Alloc(uint32_t size)
 Alloc:
         push    ebx
-        mcall   68, 12, [esp + 4 + 4]
+        mcall   SF_SYS_MISC, SSF_MEM_ALLOC, [esp + 4 + 4]
         pop     ebx
         ret     4
 ; stdcall Free(void* ptr)
 Free:
         push    ebx
-        mcall   68, 13, [esp + 4 + 4]
+        mcall   SF_SYS_MISC, SSF_MEM_FREE, [esp + 4 + 4]
         pop     ebx
         ret     4
 
@@ -195,7 +201,7 @@ FileInfo:
         mov     edx, [esp + 8]
         push    ebx
         sub     esp, sizeof.FILED
-        mov     dword[esp + FILED.opcode], 5 ; file info
+        mov     dword[esp + FILED.opcode], SSF_GET_INFO ; file info
         mov     dword[esp + FILED.offset + 4], 0 ; zero flag
         mov     dword[esp + FILED.buffer], edx
         mov     dword[esp + FILED.name_encode], 3 ;UTF-8
@@ -235,7 +241,7 @@ FileRead:
         mov     edx, [esp + 12]
 
         push    ebx
-        mov     [eax + FILED.opcode], 0
+        mov     [eax + FILED.opcode], SSF_READ_FILE
         mov     [eax + FILED.size], edx
         mov     [eax + FILED.buffer], ecx
 
@@ -244,7 +250,7 @@ FileRead:
 
         test    eax, eax
         jz      @f
-        cmp     eax, 6 ; EOF
+        cmp     eax, FSERR_END_OF_FILE ; EOF
         je      @f
         xor     ebx, ebx
 @@:
@@ -276,7 +282,7 @@ FileReadOfName:
         mov     eax, [esp + 12]
         push    ebx
         sub     esp, sizeof.FILED
-        mov     dword[esp + FILED.opcode], 0
+        mov     dword[esp + FILED.opcode], SSF_READ_FILE
         mov     dword[esp + FILED.offset], 0
         mov     dword[esp + FILED.offset + 4], 0
         mov     dword[esp + FILED.size], eax
@@ -287,7 +293,7 @@ FileReadOfName:
         mcall   80
         test    eax, eax
         jz      @f
-        cmp     eax, 6 ; EOF
+        cmp     eax, FSERR_END_OF_FILE ; EOF
         je      @f
         xor     ebx, ebx
 @@:
@@ -793,6 +799,54 @@ finish_send_resp:
         add     esp, 5
 .exit:
         ret     4
+
+; uint32_t read_http_body(CONNECT_DATA* session, char* buff, uint32_t len)
+read_http_body:
+        push    esi edi
+        ; check length in buffer
+        xor     eax, eax
+        mov     edx, [esp + 4*2 + 4]
+        mov     ecx, [esp + 4*2 + 12]
+        mov     edi, [esp + 4*2 + 8]
+        cmp     dword[edx + CONNECT_DATA.message_body_len], 0
+        jz      .get_new_buffer
+.local_buffer:
+        mov     esi, [edx + CONNECT_DATA.message_body]
+        cmp     ecx, [edx + CONNECT_DATA.message_body_len]
+        pushfd
+        jbe     @f
+        mov     ecx, [edx + CONNECT_DATA.message_body_len]
+@@:
+        sub     [edx + CONNECT_DATA.message_body_len], ecx
+        add     [edx + CONNECT_DATA.message_body], ecx
+        push    ecx
+        rep movsb
+        pop     eax
+
+        popfd
+        jbe     .exit
+        sub     ecx, eax
+        ; ecx - not readed bytes
+        ; eax - count reading bytes
+.get_new_buffer:
+        push    eax
+
+        ;read data from socket
+        push    dword 0 ;flags
+        push    ecx
+        push    esi
+        push    dword[edx + CONNECT_DATA.socket]
+        call    netfunc_recv
+
+        cmp     eax, -1
+        je      .exit
+
+        add     eax, [esp]
+        add     esp, 4
+.exit:
+        pop     edi esi
+        ret     12
+
 
 ;-----------------------------------------------------------------------------
 ;void close_server()

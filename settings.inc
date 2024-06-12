@@ -147,8 +147,9 @@ load_settings:
         ; copy uri path
         push    esi edi
         mov     esi, [esp + 4*2 + 4*3] ; name
-        lea     edi, [eax + HTTPD_MODULE.uri_path + 1]
-        mov     byte[edi - 1], '/'
+        ;lea     edi, [eax + HTTPD_MODULE.uri_path + 1]
+        ;mov     byte[edi - 1], '/'
+        lea     edi, [eax + HTTPD_MODULE.uri_path]
 @@:
         movsb
         cmp     byte[edi - 1], 0
@@ -162,7 +163,7 @@ load_settings:
         cmp     byte[edi - 1], 0
         je     @f
 
-        cmp     byte[esi - 1], ';'
+        cmp     byte[esi - 1], ','
         jne     @b
         mov     byte[edi - 1], 0
         mov     [GLOBAL_DATA._module_cmd], esi
@@ -188,6 +189,8 @@ load_settings:
         jmp     .add_module.exit
 @@: ; good
         ; init httpd module
+        lea     eax, [esi + HTTPD_MODULE.uri_path]
+        push    eax
         push    dword[GLOBAL_DATA._module_cmd]
         push    dword EXPORT_DATA
         invoke  httpd_import.init

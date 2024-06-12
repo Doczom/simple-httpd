@@ -9,15 +9,12 @@ file_server:
         mov     ecx, [esi + CONNECT_DATA.http_verion]
         cmp     dword[ecx], 'HTTP'
         jne     .err_http_501
-        cmp     word[ecx + 4], '/1' 
-        jne     .err_http_501
+        cmp     dword[ecx + 4], '/1.0'
+        je      @f
         
-;        cmp     byte[ecx + 7], '1'
-;        je      .http_1_1 
-;        ; http 1.0;
-;
-;.http_1_1: 
-
+        cmp     dword[ecx + 4], '/1.1'
+        jne     .err_http_501
+@@:
         ; check name on ../../ and other bad items
         mov     ecx, [esi + CONNECT_DATA.uri_path]
 @@:
@@ -74,8 +71,12 @@ file_server:
         cmp     dword[ecx + 4], 'ONS'
         je      .send_options
 @@:
+        cmp     dword[ecx], 'HEAD'
+        je      ..check_zero
+
         cmp     dword[ecx], 'POST'
         jne     @f
+..check_zero:
         cmp     byte[ecx + 4], 0
         je      .send_file
 @@:
@@ -122,6 +123,10 @@ file_server:
 
         stdcall begin_send_resp, ebp, [edi - 40 + 32], [edi - 40 + 36]
         ;cmp     eax, -1
+        mov     ecx, [esi + CONNECT_DATA.http_method]
+        cmp     dword[ecx], 'HEAD'
+        je      .finish_send_file
+
 .send_block_file:
         mov     eax, [esp] ; allocated buffer
         stdcall FileRead, edi, eax, SIZE_FILE_BUFFER

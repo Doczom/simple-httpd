@@ -24,19 +24,22 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         sockaddr        dd 16/4 ; socaddr connection
         buffer_request  dd 0 ; pointer to buffer for geting message socket
         request_size    dd 0 ; size geted data from client
-        end_buffer_request dd 0 ; для парсера 
+        end_buffer_request dd 0 ; privat data for parser
         buffer_response dd 0 ; pointer to buffwr for resp message 
-        http_method     dd 0 ; указатель на строку
-        http_verion     dd 0 ; pointer to the asciiz string with protocol version
+        http_method     dd 0 ; pointer to string
+        http_verion     dd 0 ; pointer to the asciiz string with
+                             ; protocol version
         num_headers     dd 0 ; number items in REQUEST_DATA
         http_headers    dd 0 ; pointer to array REQUEST_DATA of HTTP headers
-        uri_scheme      dd 0 ; указатель на схему
+        uri_scheme      dd 0 ; pointer to string
         uri_authority   dd 0 ; pointer to string(%XX not converted)
-        uri_path        dd 0 ; указатель на декодированный путь к ресурсу(без параметров)
+        uri_path        dd 0 ; pointer to converted uri path in UTF-8 string
         num_uri_args    dd 0 ;
-        uri_arg         dd 0 ; pointer to the REQUEST_DATA array of string uri arguments
-        uri_fragment    dd 0 ; указатель на строку
-        message_body    dd 0 ; указатель на тело http запроса
+        uri_arg         dd 0 ; pointer to the REQUEST_DATA array of string
+                             ; uri arguments
+        uri_fragment    dd 0 ; pointer to string
+        message_body    dd 0 ; pointer to body of http request
+        message_body_len dd 0 ; length message_body in buffer
 ends
 
 struct FILED
@@ -69,11 +72,11 @@ struct IMPORT_DATA
         FileInfo        rd 1
         ;FS_STATUS stdcall FileInfo(char* path, void* buffer);
         FileRead        rd 1
-        ;uint32_t stdcall FileRead(FILED* file, void* buffer, uint32_t size);
+        ;uint32_t stdcall FileRead(FILED* file, void* buff, uint32_t size);
         FileSetOffset   rd 1
         ;void stdcall FileSetOffset(FILED* file, uint64_t offset);
         FileReadOfName  rd 1
-        ;uint32_t stdcall FileReadOfName(char* path, void* buffer, uint32_t size);
+        ;uint32_t FileReadOfName(char* path, void* buff, uint32_t size);
         ;---------------------------------------------------------------------
         send_resp       rd 1
         ; send_resp(RESPD* ptr, char* content, uint32_t length);
@@ -85,9 +88,9 @@ struct IMPORT_DATA
         ; void set_http_status(RESPD* ptr, uint32_t status);
         ;   status in '200' format
         add_http_header rd 1
-        ; uint32_t add_http_header(RESPD* ptr, char* ptr_header, uint32_t length);
+        ; uint32_t add_http_header(RESPD* ptr, char* header, uint32_t length);
         del_http_header rd 1
-        ; uint32_t del_http_header(RESPD* ptr, char* ptr_header);
+        ; uint32_t del_http_header(RESPD* ptr, char* header);
         ;   no del std header
         set_http_ver    rd 1
         ; void set_http_ver(RESPD* ptr, char* version, uint32_t length);
@@ -101,6 +104,8 @@ struct IMPORT_DATA
         ;char* find_uri_arg(CONNECT_DATA* session, char* key);
         find_header     rd 1
         ;char* find_header(CONNECT_DATA* session, char* key);
+        read_http_body  rd 1
+        ;uint32_t read_http_body(CONNECT_DATA* session, char* buff, uint32_t len)
         get_mime_type   rd 1
         ;char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
         close_server    rd 1

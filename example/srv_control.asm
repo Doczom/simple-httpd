@@ -49,7 +49,7 @@ unit_init:
         ;unit init successful
 .exit:
         pop     edi esi
-        ret     8
+        ret     12
 
 
 server_entry:
@@ -127,13 +127,45 @@ key_token:
 key_cmd:
         db 'cmd',0
 
+CMD_STOP        = 'S'
+CMD_REBOOT      = 'R'
+
+
+
 text403:
-        db 'Access to server management is prohibited.',\
-        ' An unknown token has been entered'
+        db '<html><head><title>Login</title><style>',\
+        'body {display: grid;',\
+        'grid-template-rows: 1fr 1fr 1fr;',\
+        'text-align: center;',\
+        'background-color: blanchedalmond;',\
+        '}',\
+        '.f {',\
+        'display: grid;',\
+        'grid-template-columns: 1fr 1fr 1fr;',\
+        '}',\
+        '.f1 {background-color: aqua;',\
+        'border: 1px solid black;',\
+        'border-radius: 2%;}',\
+        'form {',\
+        'left: 50%;',\
+        'position: absolute;',\
+        'top: 50%;',\
+        'transform: translate(-50%, -50%);}',\
+        '</style></head>',\
+        '<body><h1>Access to server management is prohibited.',\
+        ' An unknown token has been entered</h1>',\
+        '<div class="f"><div></div>',\
+        '<div class="f1"><form method="get">',\
+        '<h2>Enter token:</h2> <input type="text" name="token" /><br />',\
+        '<input type="submit" value="Submit" />',\
+        '</form></div>',\
+        '<div></div></div><div></div>',\
+        '</body></html>'
 .length = $ - text403
 
 text_board:
-        db '<body> <h1> Control panel of simple-httpd</h1> <a href="?cmd=S&token='
+        db '<body> <h1> Control panel of simple-httpd</h1>',\
+        '<a href="?cmd=S&token='
 .token:
         db '      ">Stop Server</a></body>'
 .size = $ - text_board

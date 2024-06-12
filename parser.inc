@@ -240,7 +240,15 @@ parse_headers:
         jnz     @b
 
         mov     byte[ecx], 0 ; \0
-        inc     ecx 
+@@:
+        inc     ecx
+
+        cmp     ecx, eax
+        jae     .error_exit
+
+        cmp     byte[ecx], ' '
+        je      @b
+
         ; save pointer to value
         mov     dword[BASE_ARRAY_HEADERS + (edx-1)*8 + 4], ecx
 @@:
@@ -251,6 +259,11 @@ parse_headers:
         inc     ecx
         cmp     word[ecx - 1], 0x0A0D
         jnz     @b
+
+        cmp     byte[ecx + 1], ' '  ; SP
+        je      @b
+        cmp     byte[ecx + 1], 0x09 ; HT
+        je      @b
 
         mov     byte[ecx - 1], 0
         inc     ecx ; set offset on new string
@@ -328,6 +341,9 @@ parse_http_query:
         je      @f
 
         mov     [esi + CONNECT_DATA.message_body], ecx
+        mov     eax, [esi + CONNECT_DATA.end_buffer_request]
+        sub     eax, ecx
+        mov     [esi + CONNECT_DATA.message_body_len], eax
 @@:        
         mov     eax, esi 
         ret

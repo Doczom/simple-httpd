@@ -45,7 +45,7 @@ unit_init:
         mov     eax, 1 ;no zero return - unit init successful
 .exit:
         pop     edi esi
-        ret     8
+        ret     12
 
 
 server_entry:

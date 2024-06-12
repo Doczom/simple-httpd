@@ -11,6 +11,8 @@ include '../module_api.inc'
 
 section '.flat' code readable align 16
 
+; cmdline: <redirect uri path>
+
 unit_init:
         xor     eax, eax
         push    esi edi
@@ -30,20 +32,27 @@ unit_init:
         jz      .exit
 
         mov     dword[eax], 0
+        mov     dword[eax + 4], 'Loca'
+        mov     dword[eax + 8], 'tion'
+        mov     word[eax + 12], ': '
+        mov     edi, eax
+        add     edi, 14
+
         mov     esi, [esp + 4*2 + 8]
-        lea     edi, [eax + 4]
-        test    esi, esi
-        jz      .exit
-        pushfd
-        cld
+@@:
+        inc     esi
+        cmp     byte[esi - 1], ' '
+        je      @b
+        dec     esi
 @@:
         cmp     byte[esi], 0
         jz      @f
         movsb
-        inc     dword[eax]
         jmp     @b
 @@:
-        popfd
+        sub     edi, eax
+        sub     edi, 4
+        mov     [eax], edi
         ;unit init successful
 .exit:
         pop     edi esi
@@ -55,62 +64,32 @@ server_entry:
         mov     esi, [esp + 4*2 + 4] ; request context
 
         mov     edi, [esp + 4*2 + 8] ; unit context
-        cmp     dword[edi], 0
-        je      .no_cmd
-
-        mov     edx, [esi + CONNECT_DATA.uri_path]
-        xor     ecx, ecx
-        dec     ecx
-@@:
-        inc     ecx
-        cmp     byte[edx + ecx], 0
-        jne     @b
-        push    ecx
-
         add     edi, 4
-        invoke  IMPORT.create_resp, esi, FLAG_TRANSFER_CHUNKED\
-                                       + FLAG_NO_CONTENT_LENGTH
+
+        invoke  IMPORT.create_resp, esi, FLAG_NO_CONTENT_ENCODING\
+                                       + FLAG_NO_CONTENT_TYPE\
+                                       + FLAG_NO_CACHE_CONTROL
         test    eax, eax
         jz      .exit
 
-        push    eax
-        invoke  IMPORT.begin_send_resp, eax, 0, 0
-        mov     eax, [esp]
-        invoke  IMPORT.send_resp, eax, edi, [edi - 4]
-        mov     eax, [esp]
-        invoke  IMPORT.send_resp, eax, text_br, text_br.size
-        mov     eax, [esp]
-        invoke  IMPORT.send_resp, eax,\
-                                  [esi + CONNECT_DATA.uri_path],\
-                                  [esp + 4]
-        invoke  IMPORT.destruct_resp ; arg in stack
-        add     esp, 4
+        mov     esi, eax
+
+        invoke  IMPORT.set_http_status, esi, dword '301'
+        invoke  IMPORT.add_http_header, esi, edi, [edi - 4]
+
+        invoke  IMPORT.begin_send_resp, esi, 0, 0
+        invoke  IMPORT.destruct_resp, esi
 .exit:
         pop     edi esi
         ret     8
-.no_cmd:
-        invoke  IMPORT.create_resp, esi, 0
-        test    eax, eax
-        jz      .exit
-
-        push    eax
-        invoke  IMPORT.send_resp, eax, text_no_cmd, text_no_cmd.size
-        invoke  IMPORT.destruct_resp
-        jmp     .exit
 
 server_close:
-
+        push    dword[esp + 4]
+        invoke  IMPORT.Free
         ret     4
 
 
 section '.data' data readable writable align 16
-
-text_no_cmd:
-        db 'For this unit in config not set arguments'
-.size = $ - text_no_cmd
-text_br:
-        db '<br>'
-.size = $ - text_br
 
 @EXPORT:
 export  \
