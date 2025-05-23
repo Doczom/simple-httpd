@@ -19,9 +19,16 @@ FLAG_NO_CACHE_CONTROL    = 0x80
 FLAG_TRANSFER_CHUNKED    = 0x100
 FLAG_RAW_STREAM          = 0x200
 
+struct sockaddr_in
+        sin_family      dw      ?       ; sa_family_t
+        sin_port        dw      ?       ; in_port_t
+        sin_addr        dd      ?       ; struct in_addr
+        sin_zero        rb      8       ; zero
+ends
+
 struct CONNECT_DATA ; 16*4 = 64 bytes
-        socket          dd 0 ; номер сокета подключения
-        sockaddr        dd 16/4 ; socaddr connection
+        socket          dd 0 ; connection socket number
+        sockaddr        sockaddr_in ; socaddr connection
         buffer_request  dd 0 ; pointer to buffer for geting message socket
         request_size    dd 0 ; size geted data from client
         end_buffer_request dd 0 ; privat data for parser
@@ -41,6 +48,8 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         message_body    dd 0 ; pointer to body of http request
         message_body_len dd 0 ; length message_body in buffer
 ends
+
+diff10 'sizeof.CONNECT_DATA: ', 0, sizeof.CONNECT_DATA
 
 struct FILED
         opcode          rd 1
@@ -113,3 +122,5 @@ struct IMPORT_DATA
 
         GLOBAL_DATA     rd 1
 ends
+
+HTTPD_THREAD_STACK = 0x4000     ; 16 kib

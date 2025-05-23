@@ -4,7 +4,6 @@ public @EXPORT as 'EXPORTS'
 
 NO_DEBUG_INPUT = 0
 include "macros.inc"
-purge mov,add,sub
 include "proc32.inc"
 
 include '../module_api.inc'

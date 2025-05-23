@@ -8,6 +8,9 @@
 ;                                                                             ;
 ;*****************************************************************************;
 
+HTTPD_FIRST_REQUEST_BUFFER      = 0x8000
+
+
 ;include "macros.inc"
   use32
   org    0
@@ -16,7 +19,6 @@
 M01header.params:
   dd     PATH, 0
 include "macros.inc"
-purge mov,add,sub
 
 include 'module_api.inc'
 
@@ -31,7 +33,7 @@ include 'settings.inc'
 
 ;CODE
 START:
-        mcall   SF_SYS_MISC, SSF_HEAP_INIT  ; init heap
+        call    InitHeap
         mcall   SF_SET_EVENTS_MASK, EVM_STACK ;set event bitmap
 
         ; init library
@@ -75,17 +77,12 @@ START:
         je      .sock_err
         mov     [srv_socket], eax
 
-        push    srv_sockaddr.length
-        push    dword srv_sockaddr
-        push    dword[srv_socket]
-        call    netfunc_bind; [srv_socket], srv_sockaddr, srv_sockaddr.length
+        stdcall netfunc_bind, [srv_socket], srv_sockaddr, srv_sockaddr.length
         cmp     eax, -1
         je      .bind_err
 
         ; listen()
-        push    dword[srv_backlog]
-        push    dword[srv_socket]
-        call    netfunc_listen; [srv_socket], [srv_backlog]
+        stdcall netfunc_listen, [srv_socket], [srv_backlog]
         cmp     eax, -1
         jz      .listen_err
 
@@ -107,12 +104,11 @@ START:
 .shutdown:
 .listen_err:
 .bind_err:
-        push    dword[srv_socket]
-        call    netfunc_close; [srv_socket]
+        stdcall netfunc_close, [srv_socket]
 
 .err_settings:
 .sock_err:
-        mcall   SF_TERMINATE_PROCESS
+        ThreadExit
 
 ;-----------------------------------------------------------------------------
 
@@ -120,28 +116,23 @@ thread_connect:
         sub     esp, sizeof.CONNECT_DATA
         mcall   SF_SET_EVENTS_MASK, EVM_STACK ; set event - network event
 
-        ; ожидание подключения Accept, sockaddr находится на вершине стека нового потока
-        ;lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
-        ;push    dword 16 ; 16 byte - sockaddr length
-        ;push    edx
-        push    srv_sockaddr.length
-        push    dword srv_sockaddr
-
+        ; Accept - wait connection, get socket and sockaddr
+        lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
+        push    sizeof.sockaddr_in
+        push    edx
         push    dword[srv_socket]
         call    netfunc_accept
 
         cmp     eax, -1
         jz      .err_accept
 
+        ; connection is enable
         mov     [esp + CONNECT_DATA.socket], eax
-        mov     ebp, esp
 
-        ; соединение установленно, теперь нужно выделить буфер(тоже на 16 кб наверное), и
+        ; теперь нужно выделить буфер(тоже на 16 кб наверное), и
         ; прочитать в этот буфер из сокета, когда прочтём ноль(или больше 4 кб), тогда
         ; выходим из цикла и анализируем заголовки и стартовую стоку.
-        mov     esi, 0x8000
-        push    esi
-        call    Alloc ;alloc memory 32 kib
+        stdcall Alloc, HTTPD_FIRST_REQUEST_BUFFER ;alloc memory 32 kib
         test    eax, eax
         jz      .err_alloc
 
@@ -153,7 +144,7 @@ thread_connect:
         ;read data from socket
         push    dword 0 ;flags
         mov     eax, [esi + CONNECT_DATA.request_size]
-        push    dword 0x8000
+        push    dword HTTPD_FIRST_REQUEST_BUFFER
         sub     [esp], eax
         push    dword[esi + CONNECT_DATA.buffer_request]
         add     [esp], eax
@@ -166,7 +157,7 @@ thread_connect:
         test    eax, eax
         jz      @f
         add     [esi + CONNECT_DATA.request_size], eax
- ;       cmp     [esi + CONNECT_DATA.request_size], 0x8000 ; check end buffer
+ ;       cmp     [esi + CONNECT_DATA.request_size], HTTPD_FIRST_REQUEST_BUFFER ; check end buffer
  ;       jb      @b
 @@:
         ; после получения всего запроса(более или менее всего) выделяем озу для
@@ -269,15 +260,14 @@ thread_connect:
         ; free IN buffer
         cmp     dword[esp + CONNECT_DATA.buffer_request], 0
         jz      .err_alloc
-        push    dword[esp + CONNECT_DATA.buffer_request]
-        call    Free
+
+        stdcall Free, [esp + CONNECT_DATA.buffer_request]
 .err_alloc:
-        push    dword[esp + CONNECT_DATA.socket]
-        call    netfunc_close
+        stdcall netfunc_close, [esp + CONNECT_DATA.socket]
 .err_accept:
-        lea     ecx,[esp + sizeof.CONNECT_DATA - 0x4000] ; get pointer to alloc memory
-        mcall   68, 13 ; free
-        mcall   SF_TERMINATE_PROCESS     ; close thread
+        add     esp, sizeof.CONNECT_DATA
+        ; close this thread
+        ret
 
 include 'parser.inc'
 

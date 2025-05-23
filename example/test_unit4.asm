@@ -4,7 +4,6 @@ public @EXPORT as 'EXPORTS'
 
 NO_DEBUG_INPUT = 0
 include "macros.inc"
-purge mov,add,sub
 include "proc32.inc"
 
 include '../module_api.inc'
@@ -83,6 +82,8 @@ server_entry:
         invoke  IMPORT.send_resp, eax,\
                                   [esi + CONNECT_DATA.uri_path],\
                                   [esp + 4]
+        mov     eax, [esp]
+        invoke  IMPORT.finish_send_resp, eax
         invoke  IMPORT.destruct_resp ; arg in stack
         add     esp, 4
 .exit:

@@ -57,13 +57,6 @@ SOL_SOCKET      = 0xffff
 SO_BINDTODEVICE = 1 shl 9
 SO_NONBLOCK     = 1 shl 31
 
-struct sockaddr_in
-        sin_family      dw      ?       ; sa_family_t
-        sin_port        dw      ?       ; in_port_t
-        sin_addr        dd      ?       ; struct in_addr
-        sin_zero        rb      8       ; zero
-ends
-
 struct addrinfo
         ai_flags        dd      ?       ; bitmask of AI_*
         ai_family       dd      ?       ; PF_*
@@ -162,30 +155,52 @@ netfunc_recv:
         pop     ebx edi esi
         ret     16
 
+macro   ThreadExit {
+        mcall   SF_TERMINATE_PROCESS
+}
+
 ; stdcall CreatThread(void* entry_thread);
 CreateThread:
         push    ebx edi
-        mcall   SF_SYS_MISC, SSF_MEM_ALLOC, 0x4000 ;alloc memory 16 kib for stack
+        ;alloc memory for stack
+        mcall   SF_SYS_MISC, SSF_MEM_ALLOC, HTTPD_THREAD_STACK
         test    eax, eax
         jz      .err
 
-        mov     ecx, 0x4000/4
+        mov     ecx, HTTPD_THREAD_STACK/4
         mov     edi, eax
         ;start thread for new connection
         mov     edx, eax
         xor     eax, eax
         rep stosd
-        add     edx, 0x4000
-        mcall   SF_CREATE_THREAD, 1, [esp + 2*4 + 4] ;<- thread entry
+        add     edx, HTTPD_THREAD_STACK - 4
+        m2m     dword[edx], dword[esp + 2*4 + 4]
+        mcall   SF_CREATE_THREAD, 1, .thread ;<- thread entry
 .err:
         pop     ebx edi
         ret     4
+
+.thread:
+        pop     eax
+        call    eax
+        lea     ecx, [esp - HTTPD_THREAD_STACK]
+        mcall   SF_SYS_MISC, SSF_MEM_FREE
+        ThreadExit
+
+
+InitHeap:
+        push    ebx
+        mcall   SF_SYS_MISC, SSF_HEAP_INIT  ; init heap
+        pop     ebx
+        ret
+
 ; stdcall Alloc(uint32_t size)
 Alloc:
         push    ebx
         mcall   SF_SYS_MISC, SSF_MEM_ALLOC, [esp + 4 + 4]
         pop     ebx
         ret     4
+
 ; stdcall Free(void* ptr)
 Free:
         push    ebx
@@ -788,7 +803,7 @@ finish_send_resp:
         mov     byte[esp], '0'
 
         mov     ecx, esp
-        mov     eax, [ebp + RESPD.session]
+        mov     eax, [edx + RESPD.session]
 
         push    dword 0
         push    dword 5 ; size buffer
