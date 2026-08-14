@@ -55,7 +55,7 @@ unit_init:
         ;unit init successful
 .exit:
         pop     edi esi
-        ret     12
+        ret     20
 
 
 server_entry:

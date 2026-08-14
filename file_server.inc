@@ -1,7 +1,33 @@
-; This is a module for processing standard requests to get a file along 
+; This is a module for processing standard requests to get a file along
 ; a path that does not belong to another module.
 
 SIZE_FILE_BUFFER        = 1400*23;64*1024
+
+struct FILESRV_DATA
+        flags           rd 1
+        uri_path        rb 4096 - 4
+        file_path       rb 4096 ; full path root dir
+ends
+
+; /*=@filesrv, ./
+; /=@filesrv, ./index.html
+; /favicon.ico=@filesrv, ./server.png
+; /files/*=@filesrv, ./*/index.html
+; /files/*.php=@filesrv, ./*/index.html
+filesrv_init:
+        xor     eax, eax
+        ret     20
+filesrv_close:
+        ret     8
+filesrv_serv:
+        ret     4
+
+
+
+
+FILESRV_FLAG_FILE       = 1b
+FILESRV_FLAG_DIR        = 10b
+FILESRV_FLAG_FPATH      = 100b  ; format path to file
 
 file_server:
 
@@ -109,7 +135,7 @@ file_server:
         mov     dword[eax + default_http_cont_type.value + 8], '    '
         lea     edi, [eax + default_http_cont_type.value]
 
-        stdcall Get_MIME_Type, [esp]
+        stdcall get_default_mime_type, [esp]
         mov     esi, eax
 @@:
         movsb
@@ -176,15 +202,21 @@ file_server:
 
         ret
 
-; char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
+;char* stdcall Get_MIME_Type(FILED* fd); //path is UTF-8 string
+get_default_mime_type:
+        stdcall Get_MIME_Type, [GLOBAL_DATA.MIME_types_arr], [esp + 4]
+        ret     4
+
+
+; char* stdcall Get_MIME_Type(void* mime_table, FILED* fd); //path is UTF-8 string
 Get_MIME_Type:
         push    esi edi
-        mov     eax, [esp + 4*2 + 4]
+        mov     eax, [esp + 4*2 + 8]
         mov     edx, [eax + FILED.path]
         mov     eax, [eax + FILED.end_path]
         push    eax
         sub     [esp], edx
-        mov     edx, [GLOBAL_DATA.MIME_types_arr]
+        mov     edx, [esp + 4*3 + 4]
 @@:
         mov     esi, [edx]
         add     edx, 4
@@ -204,7 +236,133 @@ Get_MIME_Type:
         mov     eax, esi
         pop     edi ;clear value in stack
         pop     edi esi 
-        ret 4
+        ret     8
 .other:
         add     esi, 4
         jmp     @b
+
+;int get_replace_substr(char* uri, char* pattern, substr_list* buff, uint32_t bufflen);
+; OUT: eax = count item or -1 for error
+; struct substr_list {
+;     u8*       ptr;
+;     uint32_t  len;
+; }
+get_matched_substr:
+        push    ebx ebp esi edi
+        mov     ebp, [esp + 4*4 + 12] ; buff
+        mov     ebx, [esp + 4*4 + 16]
+        add     ebx, ebp ; ptr to end buffer
+
+
+        mov     esi, [esp + 4*4 + 4] ; uri
+        mov     edi, [esp + 4*4 + 8] ; pattern
+        cld
+        ; check module for all uri path
+@@:
+        cmpsb
+        jne     .check_special_char
+
+        cmp     byte[edi - 1], 0
+        jne     @b
+.end_scan:
+        sub     ebp, [esp + 4*4 + 12]
+        shr     ebp, 3 ; div 8
+        mov     eax, ebp
+        pop     edi esi ebp ebx
+        ret     16
+
+.found_last_substr:
+        add     ebp, 2*4  ; ptr + length
+        cmp     ebp, ebx
+        ja     .end_scan
+
+        dec     esi
+        mov     [ebp - 8], esi
+
+        mov     ecx, esi
+@@:
+        cmp     byte[esi], 0
+        lea     esi, [esi + 1]
+        jne     @b
+
+        inc     ecx
+        sub     esi, ecx
+        mov     [ebp - 4], esi
+
+        jmp     .end_scan
+
+.check_special_char:
+.found_special_char:
+        cmp     byte[edi - 1], '*'
+        jne     .no_special_char
+
+        ; check next char in uri of modules
+        cmp     byte[edi], 0
+        je      .found_last_substr  ; case "/file.txt/i.png"  "/file.txt*"
+        ; uri path "*name" or "*name*"
+        dec     esi
+
+        add     ebp, 2*4  ; ptr + length
+        cmp     ebp, ebx
+        ja      .special_char_loop
+
+        mov     [ebp - 8], esi
+        mov     dword[ebp - 4], 0  ; if length(*) substr = 0
+
+.special_char_loop:
+        cmp     byte[esi], 0
+        je      .fail_uri ; case "/file"  "/file*.open"
+
+        xor     ecx, ecx
+@@:
+        inc     ecx
+        mov     dl, byte[edi + ecx - 1]
+
+        cmp     dl, '*'
+        je      .find_next_spec_char
+
+        cmp     byte[esi + ecx - 1], dl
+        lea     esi, [esi + 1]
+        jne     .special_char_loop
+        dec     esi
+
+        test    dl, dl
+        jnz     @b
+
+        ; case "/file/text.txt"  "/file*.txt"
+        cmp     ebp, ebx
+        ja      .end_scan
+
+        mov     ecx, esi
+        sub     ecx, [ebp - 8]
+        mov     [ebp - 4], ecx
+
+        jmp     .end_scan
+
+.find_next_spec_char:
+        ; found substr
+        ; case "/file1234567/text.txt"  "/file*/text*"
+        cmp     ebp, ebx
+        ja      @f
+
+        mov     eax, esi
+        sub     eax, [ebp - 8]
+        mov     [ebp - 4], eax
+@@:
+        add     esi, ecx
+        add     edi, ecx
+
+        jmp     .found_special_char
+
+.fail_uri:
+.no_special_char:
+        pop     edi esi ebp ebx
+
+        mov     eax, -1
+        ret     16
+
+
+
+
+
+

@@ -1,12 +1,14 @@
 ;*****************************************************************************;
-;  Copyright (C) 2023-2024, Mikhail Frolov aka Doczom . All rights reserved.  ;
+;  Copyright (C) 2023-2026, Mikhail Frolov aka Doczom . All rights reserved.  ;
 ;            Distributed under terms of the 3-Clause BSD License.             ;
 ;                                                                             ;
 ;                 httpd - Simple http server for Kolibri OS.                  ;
 ;                                                                             ;
-;                         Version 0.2.5, 13 June 2024                         ;
+;                         Version 0.2.6, 14 August 2026                       ;
 ;                                                                             ;
 ;*****************************************************************************;
+
+SERVER_VERSION  equ '0.2.6'
 
 HTTPD_FIRST_REQUEST_BUFFER      = 0x8000
 
@@ -14,10 +16,11 @@ HTTPD_FIRST_REQUEST_BUFFER      = 0x8000
 ;include "macros.inc"
   use32
   org    0
-  db     'MENUET01'
+  db     'MENUET02'
   dd     1, START, I_END, MEM, STACKTOP
 M01header.params:
-  dd     PATH, 0
+  dd     PATH, IMAGE_PATH
+  dd     0, 0, 0, 0 ; for MENUET02 format
 include "macros.inc"
 
 include 'module_api.inc'
@@ -25,13 +28,15 @@ include 'module_api.inc'
 include "proc32.inc"
 include "dll.inc"
 include "KOSfuncs.inc"
+include "debug-fdo.inc"
+
+__DEBUG__               = 1             ; enable/disable
+__DEBUG_LEVEL__         = 1             ; 1 = all, 2 = errors
 ;include 'D:\kos\programs\network.inc'
-;KOS_APP_START
 
 include 'sys_func.inc'
 include 'settings.inc'
 
-;CODE
 START:
         call    InitHeap
         mcall   SF_SET_EVENTS_MASK, EVM_STACK ;set event bitmap
@@ -172,7 +177,7 @@ thread_connect:
         call    parse_http_query ; ecx - buffer
         test    eax, eax
         jz      .err_parse
-        ; find unit  for uri path
+        ; find module for uri path
         cmp     dword[GLOBAL_DATA.modules], 0
         jz      .no_modules
 
@@ -277,7 +282,8 @@ include 'httpd_lib.inc'
 
 
 I_END:
-;DATA
+
+include_debug_strings
 
 @IMPORT:
 library libini,                 'libini.obj'
@@ -288,7 +294,7 @@ import  libini,\
         ini.enum_keys,          'ini_enum_keys'
 
 
-default_ini_path: db 'httpd.ini',0
+default_ini_path:       db 'httpd.ini',0
 
 ini_section_units:      db 'MODULES',0
 ini_section_main:       db 'MAIN', 0
@@ -301,6 +307,10 @@ ini_key_flags           db 'flags',0
 ini_key_work_dir        db 'work_dir',0
 ini_key_modules_dir     db 'modules_dir',0
 ini_key_mime_file       db 'mime_file',0
+ini_key_threads         db 'threads',0
+ini_key_max_threads     db 'max_threads',0
+ini_key_rules           db 'rules',0
+ini_key_http_transport  db 'http_transport',0
 
 ini_key_mbedtls_obj     db 'mbedtls',0
 ini_key_ca_cer          db 'ca_cer',0
@@ -311,14 +321,11 @@ httpd_module_init       db 'httpd_init',0
 httpd_module_serv       db 'httpd_serv',0
 httpd_module_close      db 'httpd_close',0
 
-IMPORT_MODULE:
-        dd      httpd_import, GLOBAL_DATA.modules_dir, 0
-
-httpd_import:
-.init   dd      httpd_module_init
-.serv   dd      httpd_module_serv
-.close  dd      httpd_module_close
+EMBEDDED_MODULES:
+        dd      filesrv_module, filesrv_init,filesrv_close, filesrv_serv
         dd      0
+
+filesrv_module: db '@filesrv',0
 
 EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      API_VERSION
@@ -353,15 +360,16 @@ EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      find_uri_arg
         dd      find_header
         dd      read_http_body
-        dd      Get_MIME_Type
+        dd      get_default_mime_type
         dd      close_server
+        dd      load_mime_file
+        dd      Get_MIME_Type
+        dd      get_matched_substr
 
         dd      GLOBAL_DATA
 .size = $ - EXPORT_DATA ; (count func)*4 + size(api ver) + 4
         dd      0
-; DATA
 
-;UDATA
 srv_stop:       rd 1 ; set 1 for skip new connections
 srv_shutdown:   rd 1 ; set 1 for ending working server
 srv_tls_enable  rd 1 ; set 1 for enable TLS mode working
@@ -380,19 +388,19 @@ srv_sockaddr:
 GLOBAL_DATA:
         .modules        rd 1 ; pointer to a doubly connected non-cyclic list (null terminator)
                              ; next, prev, ptr of httpd_serv(), uri path
-        .work_dir              rb 1024 ; max size path to work directory
+        .hosts                 rd 1 ; pointer to array of HTTPD_HOST
+        .work_dir              rb 4096 ; max size path to work directory
         .work_dir.size         rd 1 ; length string
-        .modules_dir           rb 1024
-        .modules_dir.end       rd 1
+        .modules_dir           rb 4096
 
         .MIME_types_arr        rd 1
         .flags                 rd 1
-        ._module_cmd           rd 1
 
 PATH:
         rb 256
+IMAGE_PATH:
+        rb 1024
 ; stack memory
-        rb 4096
+        rb 16*1024 ; 16kib for stack
 STACKTOP:
 MEM:
-;KOS_APP_END

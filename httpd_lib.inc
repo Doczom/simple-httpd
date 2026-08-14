@@ -96,7 +96,7 @@ default_http_cont_len:
 
 align   4
 default_http_header_server:
-                db 'Server: simple-httpd/0.3.0', 13, 10
+                db 'Server: simple-httpd/', SERVER_VERSION, 13, 10
 .length = $ - default_http_header_server
 
 align   4
@@ -113,9 +113,9 @@ http_header_transfer_chunked:
 align   4
 http_response_err_501:
                 db 'HTTP/1.1 '
-                db '501 ',13, 10
-                db 'Error parsing your request message. The version is not supported or another error.'
-                db 'Server: simple-httpd/0.3.0', 13, 10
+                db '501 '
+                db 'Error parsing your request message. The version is not supported or another error.', 13, 10
+                db 'Server: simple-httpd/', SERVER_VERSION, 13, 10
                 db 'Connection: close', 13, 10
                 db 13, 10
 .size = $ - http_response_err_501
@@ -124,7 +124,7 @@ align   4
 http_response_err_404:
                 db 'HTTP/1.1 '
                 db '404 ',13, 10
-                db 'Server: simple-httpd/0.3.0', 13, 10
+                db 'Server: simple-httpd/', SERVER_VERSION, 13, 10
                 db 'Content-length: 45', 13, 10
                 db 'Content-type: text/plain', 13, 10;
                 db 'Connection: close', 13, 10
@@ -136,7 +136,7 @@ align   4
 http_response_options:
                 db 'HTTP/1.1 '
                 db '204 ',13, 10
-                db 'Server: simple-httpd/0.3.0', 13, 10
+                db 'Server: simple-httpd/', SERVER_VERSION, 13, 10
                 db 'Allow: OPTIONS, GET, POST', 13, 10
                 db 'Connection: close', 13, 10
                 db 13, 10

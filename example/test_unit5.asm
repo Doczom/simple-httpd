@@ -26,7 +26,7 @@ unit_init:
         mov     eax, 1 ;no zero return - module init successful
 .exit:
         pop     edi esi
-        ret     12
+        ret     20
 
 
 server_entry:

@@ -4,7 +4,7 @@
 ;                                                                             ;
 ;*****************************************************************************;
 
-API_VERSION     = 0x100 ; 0.1.0
+API_VERSION     = 0x000101 ; 0.1.1
 
 FLAG_KEEP_ALIVE          = 0x01
 FLAG_NO_CONNECTION       = 0x02
@@ -32,7 +32,7 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         buffer_request  dd 0 ; pointer to buffer for geting message socket
         request_size    dd 0 ; size geted data from client
         end_buffer_request dd 0 ; privat data for parser
-        buffer_response dd 0 ; pointer to buffwr for resp message 
+        buffer_response dd 0 ; pointer to buffer for resp message
         http_method     dd 0 ; pointer to string
         http_verion     dd 0 ; pointer to the asciiz string with
                              ; protocol version
@@ -115,12 +115,19 @@ struct IMPORT_DATA
         ;char* find_header(CONNECT_DATA* session, char* key);
         read_http_body  rd 1
         ;uint32_t read_http_body(CONNECT_DATA* session, char* buff, uint32_t len)
-        get_mime_type   rd 1
-        ;char* stdcall Get_MIME_Type(FILED* fd); //path is ASCIIZ string
+        get_default_mime_type   rd 1
+        ;char* stdcall Get_MIME_Type(FILED* fd);
         close_server    rd 1
         ;void close_server();
-
+        load_mime_file  rd 1
+        ; void* __stdcall load_mime_file(char* file);
+        get_mime_type   rd 1
+        ; char* __stdcall Get_MIME_Type(void* mime_table, FILED* fd);
+        get_matched_substr      rd 1
+        ;int __stdcall get_replace_substr(char* uri, char* pattern, substr_list* buff, uint32_t bufflen);
         GLOBAL_DATA     rd 1
 ends
 
 HTTPD_THREAD_STACK = 0x4000     ; 16 kib
+
+HTTPD_ERRNO_OFFSET = 0x20       ; offset in Tread Local Storage(fs:[offset])

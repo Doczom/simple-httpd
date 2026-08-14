@@ -105,30 +105,33 @@ netfunc_socket:
         push    ebx esi
         mcall   SF_NETWORK_SOCKET, SSF_OPEN,\
                         [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
-        ;mov     [fs:0], ebx ;errno
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx ;errno
         pop     esi ebx
         ret     12
 
-;stdcall close(uint32_t sock_number);
+;stdcall close(int32_t sock_number);
 netfunc_close:
         push    ebx
         mcall    SF_NETWORK_SOCKET, SSF_CLOSE, [esp + 4 + 4]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
         pop     ebx
         ret     4
 
-;stdcall bind(uint32_t sock_num, sockaddr* _sockaddr_struct, uint32_t sockaddr_size)
+;stdcall bind(int32_t sock_num, sockaddr* _sockaddr_struct, uint32_t sockaddr_size)
 netfunc_bind:
         push    esi ebx
         mcall   SF_NETWORK_SOCKET, SSF_BIND,\
                         [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
         pop     ebx esi
         ret     12
 
-;stdcall listen(uint32_t socket, uint32_t backlog)
+;stdcall listen(int32_t socket, uint32_t backlog)
 netfunc_listen:
         push    ebx
         mcall   SF_NETWORK_SOCKET, SSF_LISTEN,\
                         [esp + 4 + 4], [esp + 4 + 8]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
         pop     ebx
         ret     8
 ;stdcall accept(uint32_t socket, sockaddr* new_sockaddr_struct, uint32_t sockaddr_size)
@@ -136,6 +139,11 @@ netfunc_accept:
         push    esi ebx
         mcall   SF_NETWORK_SOCKET, SSF_ACCEPT,\
                         [esp + 2*4 + 4], [esp + 2*4 + 8], [esp + 2*4 + 12]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
+        cmp     eax, -1
+        jne     .end
+        DEBUGF  1, "HTTPD: accept error %d\n", ebx
+.end:
         pop     ebx esi
         ret     12
 ;stdcall send(uint32_t socket, void* buff, uint32_t len_buff, uint32_t flags)
@@ -144,6 +152,14 @@ netfunc_send:
         mcall   SF_NETWORK_SOCKET, SSF_SEND,\
                         [esp + 3*4 + 4], [esp + 3*4 + 8],\
                         [esp + 3*4 + 12], [esp + 3*4 + 16]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
+        cmp     eax, -1
+        jne     .end
+        DEBUGF  1, "HTTPD: send error %d ", ebx
+        DEBUGF  1, "sock=0x%x buff=0x%x len=0x%x flags=0x%x\n",\
+                        [esp + 3*4 + 4], [esp + 3*4 + 8],\
+                        [esp + 3*4 + 12], [esp + 3*4 + 16]
+.end:
         pop     ebx edi esi
         ret     16
 ;stdcall recv(uint32_t socket, void* buff, uint32_t len_buff, uint32_t flags)
@@ -152,6 +168,14 @@ netfunc_recv:
         mcall   SF_NETWORK_SOCKET, SSF_RECEIVE,\
                         [esp + 3*4 + 4], [esp + 3*4 + 8],\
                         [esp + 3*4 + 12], [esp + 3*4 + 16]
+        mov     [fs:HTTPD_ERRNO_OFFSET], ebx
+        cmp     eax, -1
+        jne     .end
+        DEBUGF  1, "HTTPD: recv error %d ", ebx
+        DEBUGF  1, "sock=0x%x buff=0x%x len=0x%x flags=0x%x\n",\
+                        [esp + 3*4 + 4], [esp + 3*4 + 8],\
+                        [esp + 3*4 + 12], [esp + 3*4 + 16]
+.end:
         pop     ebx edi esi
         ret     16
 
@@ -205,6 +229,25 @@ Alloc:
 Free:
         push    ebx
         mcall   SF_SYS_MISC, SSF_MEM_FREE, [esp + 4 + 4]
+        pop     ebx
+        ret     4
+
+; stdcall LoadLibrary(const char* path); //only UTF-8 string
+LoadLibrary:
+        push    ebx
+        mov     ecx, [esp + 4 + 4]
+        mcall   SF_SYS_MISC, 18, , 3 ; UTF-8
+        test    eax, eax
+        jz      .exit
+
+        mov     ecx, [eax]
+        cmp     dword[ecx], 'lib_'
+        jnz     .exit
+
+        push    eax
+        stdcall dll.Init, [ecx + 4]
+        pop     eax
+.exit:
         pop     ebx
         ret     4
 
@@ -302,7 +345,7 @@ FileReadOfName:
         mov     dword[esp + FILED.offset + 4], 0
         mov     dword[esp + FILED.size], eax
         mov     dword[esp + FILED.buffer], edx
-        mov     dword[esp + FILED.name_encode], 3 ;UTF-8
+        mov     dword[esp + FILED.name_encode], 3 ; UTF-8
         mov     dword[esp + FILED.path], ecx
         mov     ebx, esp
         mcall   80
@@ -317,6 +360,13 @@ FileReadOfName:
         pop     ebx
         ret     12
 
+; int stdcall GetCurrentDir(char* buffer, uint32_t size)
+GetCurrentDir:
+        push    esi ebx
+        mcall   SF_CURRENT_FOLDER, 5, [esp + 2*4 + 4], [esp + 2*4 + 8], 3 ; UTF-8
+        dec     eax ; skip null termitator
+        pop     ebx esi
+        ret     8
 
 
 ;-----------------------------------------------------------------------------
