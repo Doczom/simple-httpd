@@ -296,7 +296,8 @@ import  libini,\
 default_ini_path:       db 'httpd.ini',0
 
 ini_section_units:      db 'MODULES',0
-ini_section_main:       db 'MAIN', 0
+ini_section_main:       db 'MAIN',0
+ini_section_libs        db 'LIBS',0
 ini_section_tls         db 'TLS',0
 
 ini_key_ip              db 'ip',0
@@ -305,6 +306,7 @@ ini_key_conn            db 'conn',0
 ini_key_flags           db 'flags',0
 ini_key_work_dir        db 'work_dir',0
 ini_key_modules_dir     db 'modules_dir',0
+ini_key_libs_dir        db 'libs_dir',0
 ini_key_mime_file       db 'mime_file',0
 ini_key_threads         db 'threads',0
 ini_key_max_threads     db 'max_threads',0
@@ -320,11 +322,17 @@ httpd_module_init       db 'httpd_init',0
 httpd_module_serv       db 'httpd_serv',0
 httpd_module_close      db 'httpd_close',0
 
+httpd_lib_init          db 'httpdlib_init',0
+httpd_lib_deinit        db 'httpdlib_deinit',0
+
 EMBEDDED_MODULES:
         dd      filesrv_module, filesrv_init,filesrv_close, filesrv_serv
         dd      0
 
 filesrv_module: db '@filesrv',0
+
+EMBEDDED_LIBS:
+        dd      0
 
 EXPORT_DATA:    ; in modules for this table using struct IMPORT_DATA
         dd      API_VERSION

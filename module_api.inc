@@ -44,7 +44,7 @@ struct CONNECT_DATA ; 16*4 = 64 bytes
         num_uri_args    dd 0 ;
         uri_arg         dd 0 ; pointer to the REQUEST_DATA array of string
                              ; uri arguments
-        uri_fragment    dd 0 ; pointer to string
+                        dd 0 ;
         message_body    dd 0 ; pointer to body of http request
         message_body_len dd 0 ; length message_body in buffer
 ends
@@ -124,10 +124,19 @@ struct IMPORT_DATA
         get_mime_type   rd 1
         ; char* __stdcall Get_MIME_Type(void* mime_table, FILED* fd);
         get_matched_substr      rd 1
-        ;int __stdcall get_replace_substr(char* uri, char* pattern, substr_list* buff, uint32_t bufflen);
+        ;int __stdcall get_matched_substr(char* uri, char* pattern, substr_list* buff, uint32_t bufflen);
         GLOBAL_DATA     rd 1
 ends
 
 HTTPD_THREAD_STACK = 0x4000     ; 16 kib
+
+HTTPD_MAX_URI_PATH_SIZE = 8192  ; 2 kib
+HTTPD_MAX_PROTO_NAME    = 32
+HTTPD_MAX_METHOD_NAME   = 64
+HTTPD_MAX_HEADNAME_SIZE = 64
+HTTPD_MAX_HEADVAL_SIZE  = 16*1024
+
+HTTPD_SERV_RETURN_DONE  = 0     ;
+HTTPD_SERV_RETURN_NEXT  = 1
 
 HTTPD_ERRNO_OFFSET = 0x20       ; offset in Tread Local Storage(fs:[offset])

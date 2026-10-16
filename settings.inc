@@ -348,7 +348,7 @@ load_modules_dir:
         cmp     byte[GLOBAL_DATA.modules_dir], '/'
         je      .exit
 
-        call    .load_image_dir
+        stdcall load_image_dir, GLOBAL_DATA.modules_dir
 
         mov     edx, 4096-1
         sub     edx, ecx
@@ -370,7 +370,10 @@ load_modules_dir:
 @@:
         pop     edi esi
         ret
-.load_image_dir:  ; OUT: ecx = length image path
+
+;  IN: [esp + 4] - pointer to buffer(>1024 bytes)
+; OUT: ecx = length image path
+load_image_dir:
         push    esi edi
         mov     edx, 1024
         mov     ecx, 1024
@@ -378,20 +381,20 @@ load_modules_dir:
         xor     eax, eax
         repnz scasb
         mov     esi, IMAGE_PATH
-        mov     edi, GLOBAL_DATA.modules_dir
+        mov     edi, [esp + 4*2 + 4]
         sub     edx, ecx
         mov     ecx, edx
         rep movsb
         ; find finish '/'
-        mov    ecx, edx
-        mov    eax, '/'
+        mov     ecx, edx
+        mov     eax, '/'
         std
         repnz scasb
         cld
-        add   ecx, 2
+        add     ecx, 2
         mov     byte[edi + 2], 0
         pop     edi esi
-        ret
+        ret     4
 
 ; IN: ebp - path to config file
 load_default_mime_file:

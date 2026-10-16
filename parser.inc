@@ -15,15 +15,15 @@ MAX_COUNT_HEADER        = 1024/(4+4)
 ;    eax = -1 - error 
 ;           0 - good
 parse_url:
-;      URI         = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+;      URI         = scheme ":" hier-part [ "?" query ]
 ;      hier-part   = "//" authority path-abempty
 ;                  / path-absolute
 ;                  / path-rootless
 ;                  / path-empty 
-;         foo://example.com:8042/over/there?name=ferret#nose
-;         \_/   \______________/\_________/ \_________/ \__/
-;          |           |            |            |        |
-;       scheme     authority       path        query   fragment
+;         foo://example.com:8042/over/there?name=ferret
+;         \_/   \______________/\_________/ \_________/
+;          |           |            |            |
+;       scheme     authority       path        query
  
         cmp     byte[ecx], '/' ; check abs-path
         je      .get_path
@@ -72,9 +72,6 @@ parse_url:
 
         cmp     al, '?'
         je      .get_query
-        
-        cmp     al, '#'
-        je      .get_fragment
 
         cmp     al, ' ' ; check end path
         je      .get_path.end
@@ -129,15 +126,14 @@ parse_url:
         cmp     byte[ecx], '='
         je      .get_args
 
-        cmp     byte[ecx], '#'  ; THIS IS COMPLETE NONSENSE, BUT SUDDENLY
-        je      .get_fragment
-
         cmp     byte[ecx], ' '  ; http://cjkhr.bvgbfdkvdf.dmejfgehf/?1pr1
         jne     @b
 .exit_2:
         mov     byte[ecx], 0
         inc     ecx
-        jmp     .exit     
+.exit:
+        xor     eax, eax 
+        ret
 
 .get_args:
         mov     byte[ecx], 0
@@ -149,9 +145,6 @@ parse_url:
 
         cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
         ja      .error_exit
-
-        cmp     byte[ecx], '#'
-        je      .get_fragment
         
         cmp     byte[ecx], ' '  
         je      .exit_2
@@ -163,25 +156,6 @@ parse_url:
         inc     ecx
 
         jmp     .get_query_new_arg
-
-.get_fragment:
-        cmp     byte[ecx], '#'
-        jne     .exit
-
-        mov     byte[ecx], 0
-        inc     ecx
-        mov     [esi + CONNECT_DATA.uri_fragment], ecx     
-@@:
-        cmp     ecx, [esi + CONNECT_DATA.end_buffer_request]
-        ja      .error_exit
-        
-        inc     ecx
-        cmp     byte[ecx - 1], ' '
-        jne     @b
-        mov     byte[ecx - 1], 0
- .exit:
-        xor     eax, eax 
-        ret
 
 .error_exit:
         ; set return value

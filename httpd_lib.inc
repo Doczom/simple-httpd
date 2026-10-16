@@ -1,38 +1,34 @@
+align   4
+day:
+        dd 'Mon,'
+        dd 'Tue,'
+        dd 'Wed,'
+        dd 'Thu,'
+        dd 'Fri,'
+        dd 'Sat,'
+        dd 'Sun,'
+.count = ($ - day) / 4
 
-;align   4
-;day:
-;                dd 'Mon,'
-;                dd 'Tue,'
-;                dd 'Wed,'
-;                dd 'Thu,'
-;                dd 'Fri,'
-;                dd 'Sat,'
-;                dd 'Sun,'
-;.count = ($ - day) / 4
-;
-;align   4
-;months:
-;                dd 'Jan '
-;                dd 'Feb '
-;                dd 'Mar '
-;                dd 'Apr '
-;                dd 'May '
-;                dd 'Jun '
-;                dd 'Jul '
-;                dd 'Aug '
-;                dd 'Sep '
-;                dd 'Oct '
-;                dd 'Nov '
-;                dd 'Dec '
-;.count = ($ - months) / 4 ; count item in this array
+align   4
+months:
+        dd 'Jan '
+        dd 'Feb '
+        dd 'Mar '
+        dd 'Apr '
+        dd 'May '
+        dd 'Jun '
+        dd 'Jul '
+        dd 'Aug '
+        dd 'Sep '
+        dd 'Oct '
+        dd 'Nov '
+        dd 'Dec '
+.count = ($ - months) / 4 ; count item in this array
 
-;       HTTP-date    = rfc1123-date | rfc850-date | asctime-date
+;       HTTP-date    = rfc1123-date
 ;       rfc1123-date = wkday "," SP date1 SP time SP "GMT"
-;       asctime-date = wkday SP date3 SP time SP 4DIGIT
 ;       date1        = 2DIGIT SP month SP 4DIGIT
 ;                      ; day month year (e.g., 02 Jun 1982)
-;       date3        = month SP ( 2DIGIT | ( SP 1DIGIT ))
-;                      ; month day (e.g., Jun  2)
 ;       time         = 2DIGIT ":" 2DIGIT ":" 2DIGIT
 ;                      ; 00:00:00 - 23:59:59
 ;       wkday        = "Mon" | "Tue" | "Wed"
@@ -49,7 +45,7 @@
 ;                db 'HTTP/1.1 '
 ;.code = $ - http_err_response
 ;                db '000 ',13, 10
-;                db 'Server: simple-httpd/0.0.1', 13, 10  ; httpd(kolibri os)/0.0.1, 13, 10
+;                db 'Server: simple-httpd/0.0.1', 13, 10
 ;                db 'Date: '
 ;.date = $ - http_err_response
 ;                db 'Sun, 30 Oct 2022 09:29:13 GMT',13, 10
