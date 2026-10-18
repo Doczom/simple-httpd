@@ -74,10 +74,7 @@ START:
         jnz     .err_settings
 
         ;init server socket
-        push    dword SO_NONBLOCK ;IPPROTO_TCP
-        push    dword SOCK_STREAM
-        push    dword AF_INET4
-        call    netfunc_socket; AF_INET4, SOCK_STREAM, SO_NONBLOCK ; we dont want to block on accept
+        stdcall netfunc_socket, AF_INET4, SO_NONBLOCK+SOCK_STREAM, IPPROTO_TCP
         cmp     eax, -1
         je      .sock_err
         mov     [srv_socket], eax
@@ -121,12 +118,10 @@ thread_connect:
         sub     esp, sizeof.CONNECT_DATA
         mcall   SF_SET_EVENTS_MASK, EVM_STACK ; set event - network event
 
+.accept_loop:
         ; Accept - wait connection, get socket and sockaddr
-        lea     edx, [esp + CONNECT_DATA.sockaddr] ; new sockaddr
-        push    sizeof.sockaddr_in
-        push    edx
-        push    dword[srv_socket]
-        call    netfunc_accept
+        lea     edx, [esp + CONNECT_DATA.sockaddr]
+        stdcall netfunc_accept, [srv_socket], edx, sizeof.sockaddr_in
 
         cmp     eax, -1
         jz      .err_accept
@@ -137,7 +132,7 @@ thread_connect:
         ; теперь нужно выделить буфер(тоже на 16 кб наверное), и
         ; прочитать в этот буфер из сокета, когда прочтём ноль(или больше 4 кб), тогда
         ; выходим из цикла и анализируем заголовки и стартовую стоку.
-        stdcall Alloc, HTTPD_FIRST_REQUEST_BUFFER ;alloc memory 32 kib
+        stdcall Alloc, HTTPD_FIRST_REQUEST_BUFFER
         test    eax, eax
         jz      .err_alloc
 
@@ -269,10 +264,14 @@ thread_connect:
         stdcall Free, [esp + CONNECT_DATA.buffer_request]
 .err_alloc:
         stdcall netfunc_close, [esp + CONNECT_DATA.socket]
-.err_accept:
+.exit:
         add     esp, sizeof.CONNECT_DATA
-        ; close this thread
         ret
+.err_accept:
+        cmp     dword[fs:HTTPD_ERRNO_OFFSET], EWOULDBLOCK
+        je      .accept_loop
+        jmp     .exit
+
 
 include 'parser.inc'
 

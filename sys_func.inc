@@ -199,7 +199,7 @@ CreateThread:
         rep stosd
         add     edx, HTTPD_THREAD_STACK - 4
         m2m     dword[edx], dword[esp + 2*4 + 4]
-        mcall   SF_CREATE_THREAD, 1, .thread ;<- thread entry
+        mcall   SF_THREAD_CONTROL, SSF_CREATE_THREAD, .thread
 .err:
         pop     ebx edi
         ret     4
